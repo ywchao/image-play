@@ -23,8 +23,15 @@ p_no = numel(pa);
 msize = 4;
 partcolor = {'g','g','g','r','b','r','b','y','y','m','c','m','c'};
 
-% set vis root
-vis_root = './outputs/dataset_vis/body_joints/';
+% choose source
+
+% % 1. with image displayed
+% vis_im = true;
+% vis_root = './outputs/dataset_vis/body_joints/';
+
+% 2. without image displayed
+vis_im = false;
+vis_root = './outputs/dataset_vis/body_joints_only/';
 
 % get list of sequences
 list_seq = dir([label_root '*.mat']);
@@ -63,7 +70,12 @@ for i = 1:num_seq
         if exist('h','var')
             delete(h);
         end
-        h = imshow(im); hold on;
+        if vis_im
+            h = imshow(im); hold on;
+        else
+            im_bg = uint8(64*ones(size(im,1),size(im,2),1));
+            h =  imshow(im_bg); hold on;
+        end
         setup_im_gcf(size(im,1),size(im,2));
         for child = 2:p_no
             x1 = anno.x(j,pa(child));

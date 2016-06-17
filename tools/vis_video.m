@@ -1,22 +1,51 @@
 
 config;
 
-FrameRate = 30;
-
-seq = 1890:1983;  % strum_guitar
-
 % choose source
+
 % 1. original frames
+% FrameRate = 30;
 % vis_root = ['./outputs/dataset_vis/videos_fr' num2str(FrameRate,'%03d') '/'];
-% 2. frames with human poses; need to run vis_body_joint_anno.m first
-frame_root = './outputs/dataset_vis/body_joints/';
-vis_root = ['./outputs/dataset_vis/videos_fr' num2str(FrameRate,'%03d') '_body_joints/'];
+
+% 2. frames with gt human poses; need to run vis_body_joint_anno.m first
+% FrameRate = 30;
+% frame_root = './outputs/dataset_vis/body_joints/';
+% vis_root = ['./outputs/dataset_vis/videos_fr' num2str(FrameRate,'%03d') '_body_joints/'];
+
+% 3. only gt human poses; need to run vis_body_joint_anno.m first
+% FrameRate = 30;
+% frame_root = './outputs/dataset_vis/body_joints_only/';
+% vis_root = ['./outputs/dataset_vis/videos_fr' num2str(FrameRate,'%03d') '_body_joints_only/'];
+
+% 4. frames with estimated human poses on cropped image; need to have penn_action_vis/ under caches/
+FrameRate = 10;
+frame_root = './caches/pose_penn_vis/';
+vis_root = ['./outputs/pose_penn_vis/videos_fr' num2str(FrameRate,'%03d') '/'];
 
 makedir(vis_root);
 
 list_seq = dir([label_root '*.mat']);
 list_seq = {list_seq.name}';
 num_seq = numel(list_seq);
+
+% strum_guitar
+% seq = 1890:1983;
+
+% first K videos for each action
+K = 10;
+action = cell(num_seq,1);
+for i = 1:num_seq
+    lb_file = [label_root list_seq{i}];
+    anno = load(lb_file);
+    assert(ischar(anno.action));
+    action{i} = anno.action;
+end
+[list_act,~,ia] = unique(action, 'stable');
+seq = zeros(1,numel(list_act)*K);
+for i = 1:numel(list_act)
+    ii = find(ia == i);
+    seq((i-1)*K+1:i*K) = ii(1:K);
+end
 
 % reading annotations
 fprintf('visualizing videos ... \n');
