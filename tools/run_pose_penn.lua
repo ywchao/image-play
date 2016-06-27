@@ -3,14 +3,24 @@ dofile('./pose-hg-demo/util.lua')
 dofile('./pose-hg-demo/img.lua')
 dofile('./common/util.lua')
 
+-- set gpu
+-- currently only support gpu mode
+cutorch.setDevice(arg[1])
+
+-- set expID
+if arg[2] then
+  expID = arg[2]
+  m = torch.load('./pose-hg-train/exp/mpii/' .. expID .. '/final_model.t7')
+else
+  expID = 'umich-stacked-hourglass'
+  m = torch.load('./data/umich-stacked-hourglass/umich-stacked-hourglass.t7')
+end
+
 -- set paths
 frame_root = './data/Penn_Action_cropped/frames/'
 label_root = './data/Penn_Action_cropped/labels/'
-cache_root = './caches/pose_penn/'
-vis_root = './caches/pose_penn_vis/'
-
--- load pre-trained model
-m = torch.load('data/umich-stacked-hourglass/umich-stacked-hourglass.t7')
+cache_root = './caches/pose_penn_' .. expID .. '/'
+vis_root = './caches/pose_penn_' .. expID .. '_vis/'
 
 -- get image seq list
 list_seq = dir(label_root, '.mat')
@@ -47,7 +57,13 @@ for i = 1, num_seq do
     -- get network output
     local out = m:forward(inp:view(1,3,256,256):cuda())
     cutorch.synchronize()
-    local hm = out[2][1]:float()
+    -- always use the last output
+    local hm
+    if type(out) == 'table' then
+        hm = out[table.getn(out)][1]:float()
+    else
+        hm = out[1]:float()
+    end
     hm[hm:lt(0)] = 0
     -- get predictions (hm and img refer to the coordinate space)
      preds_hm, preds_img = getPreds(hm, center, scale)
