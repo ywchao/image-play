@@ -18,9 +18,19 @@ config;
 % vis_root = ['./outputs/dataset_vis/videos_fr' num2str(FrameRate,'%03d') '_body_joints_only/'];
 
 % 4. frames with estimated human poses on cropped image; need to have penn_action_vis/ under caches/
+% FrameRate = 10;
+% frame_root = './caches/pose_penn_umich-stacked-hourglass_vis/';
+% vis_root = ['./outputs/pose_penn_umich-stacked-hourglass_vis/videos_fr' num2str(FrameRate,'%03d') '/'];
+
+% 5. frames with estimated human poses on cropped image; need to have penn_action_vis/ under caches/
+% FrameRate = 10;
+% frame_root = './caches/pose_penn_hg-single_vis/';
+% vis_root = ['./outputs/pose_penn_hg-single_vis/videos_fr' num2str(FrameRate,'%03d') '/'];
+
+% 6. frames with estimated human poses on cropped image; need to have penn_action_vis/ under caches/
 FrameRate = 10;
-frame_root = './caches/pose_penn_vis/';
-vis_root = ['./outputs/pose_penn_vis/videos_fr' num2str(FrameRate,'%03d') '/'];
+frame_root = './caches/pose_penn_hg-single-no-skip_vis/';
+vis_root = ['./outputs/pose_penn_hg-single-no-skip_vis/videos_fr' num2str(FrameRate,'%03d') '/'];
 
 makedir(vis_root);
 
