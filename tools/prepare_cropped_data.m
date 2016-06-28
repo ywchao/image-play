@@ -55,6 +55,6 @@ for i = 1:num_seq
     anno.bbox(:,[2 4]) = anno.bbox(:,[2 4]) - y1 + 1;
     anno.dimensions(1) = y2 - y1 + 1;
     anno.dimensions(2) = x2 - x1 + 1;
-    save(lbdata_file,'anno');
+    save(lbdata_file,'-struct','anno');
 end
 fprintf('done.\n');
