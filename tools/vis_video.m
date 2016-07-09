@@ -17,20 +17,25 @@ config;
 % frame_root = './outputs/dataset_vis/body_joints_only/';
 % vis_root = ['./outputs/dataset_vis/videos_fr' num2str(FrameRate,'%03d') '_body_joints_only/'];
 
-% 4. frames with estimated human poses on cropped image; need to have penn_action_vis/ under caches/
+% 4. frames with estimated human poses on cropped image;
 % FrameRate = 10;
-% frame_root = './caches/pose_penn_umich-stacked-hourglass_vis/';
-% vis_root = ['./outputs/pose_penn_umich-stacked-hourglass_vis/videos_fr' num2str(FrameRate,'%03d') '/'];
+% frame_root = './caches/pose_penn_mpii_umich-stacked-hourglass_vis/';
+% vis_root = ['./outputs/pose_penn_mpii_umich-stacked-hourglass_vis/videos_fr' num2str(FrameRate,'%03d') '/'];
 
-% 5. frames with estimated human poses on cropped image; need to have penn_action_vis/ under caches/
+% 5. frames with estimated human poses on cropped image;
 % FrameRate = 10;
-% frame_root = './caches/pose_penn_hg-single_vis/';
-% vis_root = ['./outputs/pose_penn_hg-single_vis/videos_fr' num2str(FrameRate,'%03d') '/'];
+% frame_root = './caches/pose_penn_mpii_hg-single_vis/';
+% vis_root = ['./outputs/pose_penn_mpii_hg-single_vis/videos_fr' num2str(FrameRate,'%03d') '/'];
 
-% 6. frames with estimated human poses on cropped image; need to have penn_action_vis/ under caches/
+% 6. frames with estimated human poses on cropped image;
+% FrameRate = 10;
+% frame_root = './caches/pose_penn_mpii_hg-single-no-skip_vis/';
+% vis_root = ['./outputs/pose_penn_mpii_hg-single-no-skip_vis/videos_fr' num2str(FrameRate,'%03d') '/'];
+
+% 7. frames with estimated human poses on cropped image;
 FrameRate = 10;
-frame_root = './caches/pose_penn_hg-single-no-skip_vis/';
-vis_root = ['./outputs/pose_penn_hg-single-no-skip_vis/videos_fr' num2str(FrameRate,'%03d') '/'];
+frame_root = './caches/pose_penn_penn-action-cropped_hg-single-no-skip-ft_vis/';
+vis_root = ['./outputs/pose_penn_penn-action-cropped_hg-single-no-skip-ft_vis/videos_fr' num2str(FrameRate,'%03d') '/'];
 
 makedir(vis_root);
 
@@ -44,16 +49,21 @@ num_seq = numel(list_seq);
 % first K videos for each action
 K = 10;
 action = cell(num_seq,1);
+train = zeros(num_seq,1);
 for i = 1:num_seq
     lb_file = [label_root list_seq{i}];
     anno = load(lb_file);
     assert(ischar(anno.action));
     action{i} = anno.action;
+    train(i) = anno.train;
 end
 [list_act,~,ia] = unique(action, 'stable');
 seq = zeros(1,numel(list_act)*K);
 for i = 1:numel(list_act)
-    ii = find(ia == i);
+    % all
+    % ii = find(ia == i);
+    % only test
+    ii = find(ia == i & train == -1);
     seq((i-1)*K+1:i*K) = ii(1:K);
 end
 
