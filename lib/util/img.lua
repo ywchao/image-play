@@ -59,7 +59,6 @@ function crop(img, center, scale, rot, res)
     local ul = transform({1,1}, center, scale, 0, res, true)
     local br = transform({res+1,res+1}, center, scale, 0, res, true)
 
-
     local pad = math.floor(torch.norm((ul - br):float())/2 - (br[1]-ul[1])/2)
     if rot ~= 0 then
         ul = ul - pad
@@ -116,6 +115,9 @@ function drawGaussian(img, pt, sigma)
     -- If not, return the image as is
     if (ul[1] > img:size(2) or ul[2] > img:size(1) or br[1] < 1 or br[2] < 1) then return img end
     -- Generate gaussian
+    -- 1. the maximum valus is normalized to 1
+    -- 2. actual sigma is size/4
+    -- verified by comparing image.gaussian(13) and matlab command: h=fspecial('gaussian', 13, 13/4); h/max(max(h))
     local size = 6 * sigma + 1
     local g = image.gaussian(size) -- , 1 / size, 1)
     -- Usable gaussian range

@@ -37,12 +37,12 @@ function distAccuracy(dists, thr)
     end
 end
 
-function heatmapAccuracy(output, label, thr, idxs)
+function heatmapAccuracy(output, label, thr, idxs, outputRes)
     -- Calculate accuracy according to PCK, but uses ground truth heatmap rather than x,y locations
     -- First value to be returned is average accuracy across 'idxs', followed by individual accuracies
     local preds = getPreds(output)
     local gt = getPreds(label)
-    local dists = calcDists(preds, gt, torch.ones(preds:size(1))*opt.outputRes/10)
+    local dists = calcDists(preds, gt, torch.ones(preds:size(1))*outputRes/10)
     local acc = {}
     local avgAcc = 0.0
     local badIdxCount = 0

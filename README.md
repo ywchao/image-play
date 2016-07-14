@@ -18,7 +18,7 @@
 
 #### Running pre-trained hourglass models using pose-hg-demo
 
-0. Download pre-trained hourglass models
+0. Download pre-trained hourglass models.
   ```Shell
   cd $IMPLAY_ROOT
   ./data/scripts/fetch_hourglass_models.sh
@@ -34,4 +34,14 @@
   ```Shell
   cd $IMPLAY_ROOT
   ln -s $MPII_ROOT/images ./pose-hg-train/data/mpii/images
+  ```
+
+#### Training hourglass-LSTM
+
+0. Generate validation set and preprocess data.
+
+  ```Shell
+  cd $IMPLAY_ROOT
+  matlab -r "generate_valid"
+  python ./tools/preprocess.py
   ```

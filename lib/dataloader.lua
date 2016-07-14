@@ -9,45 +9,54 @@
 --  Multi-threaded data loader
 --
 
-local datasets = require 'datasets/init'
 local Threads = require 'threads'
 Threads.serialization('threads.sharedserialize')
 
 local M = {}
-local DataLoader = torch.class('resnet.DataLoader', M)
+local DataLoader = torch.class('image-play.DataLoader', M)
 
 function DataLoader.create(opt)
    -- The train and val loader
    local loaders = {}
 
    for i, split in ipairs{'train', 'val'} do
-      local dataset = datasets.create(opt, split)
-      loaders[i] = M.DataLoader(dataset, opt, split)
+      -- local dataset = Dataset(opt, split)
+      -- loaders[split] = M.DataLoader(dataset, opt, split)
+      loaders[split] = M.DataLoader(opt, split)
    end
 
-   return table.unpack(loaders)
+   -- return table.unpack(loaders)
+   return loaders
 end
 
-function DataLoader:__init(dataset, opt, split)
-   local manualSeed = opt.manualSeed
+-- function DataLoader:__init(dataset, opt, split)
+function DataLoader:__init(opt, split)
+   -- local manualSeed = opt.manualSeed
    local function init()
-      require('datasets/' .. opt.dataset)
+      -- require('lib/datasets/' .. opt.dataset)
+      -- We should have initialize dataset in creat(). This is currently not
+      -- possible since the used hdf5 library will throw errors if we do that.
+      local Dataset = require('lib/datasets/' .. opt.dataset)
+      dataset = Dataset(opt, split)
    end
    local function main(idx)
-      if manualSeed ~= 0 then
-         torch.manualSeed(manualSeed + idx)
-      end
+      -- this only matters if there is randomness in each thread
+      -- if manualSeed ~= 0 then
+      --    torch.manualSeed(manualSeed + idx)
+      -- end
       torch.setnumthreads(1)
       _G.dataset = dataset
-      _G.preprocess = dataset:preprocess()
       return dataset:size()
    end
 
    local threads, sizes = Threads(opt.nThreads, init, main)
-   self.nCrops = (split == 'val' and opt.tenCrop) and 10 or 1
    self.threads = threads
    self.__size = sizes[1][1]
-   self.batchSize = math.floor(opt.batchSize / self.nCrops)
+   if split == 'train' then
+     self.batchSize = opt.batchSize
+   else
+     self.batchSize = 1
+   end
 end
 
 function DataLoader:size()
@@ -64,32 +73,50 @@ function DataLoader:run()
       while idx <= size and threads:acceptsjob() do
          local indices = perm:narrow(1, idx, math.min(batchSize, size - idx + 1))
          threads:addjob(
-            function(indices, nCrops)
+            function(indices)
+               -- local input = {}
+               -- local target = {}
+               -- for i, idx in ipairs(indices:totable()) do
+               --    sample = _G.dataset:get(idx)
+               --    input[i] = sample.input
+               --    target[i] = sample.target
+               -- end
+               -- collectgarbage()
+               -- return {
+               --    input = input,
+               --    target = target,
+               -- }
                local sz = indices:size(1)
-               local batch, imageSize
-               local target = torch.IntTensor(sz)
+               local input, imageSize
+               local target, targetSizes
                for i, idx in ipairs(indices:totable()) do
                   local sample = _G.dataset:get(idx)
-                  local input = _G.preprocess(sample.input)
-                  if not batch then
-                     imageSize = input:size():totable()
-                     if nCrops > 1 then table.remove(imageSize, 1) end
-                     batch = torch.FloatTensor(sz, nCrops, table.unpack(imageSize))
+                  if not input then
+                     imageSize = sample.input:size():totable()
+                     input = torch.FloatTensor(sz, unpack(imageSize))
                   end
-                  batch[i]:copy(input)
-                  target[i] = sample.target
+                  if not target then
+                     targetSize = sample.target[1]:size():totable()
+                     target = {}
+                     for j = 1, #sample.target do
+                       target[j] = torch.FloatTensor(sz, unpack(targetSize))
+                    end
+                  end
+                  input[i]:copy(sample.input)
+                  for j = 1, #target do
+                    target[j][i] = sample.target[j]
+                  end
                end
                collectgarbage()
                return {
-                  input = batch:view(sz * nCrops, table.unpack(imageSize)),
+                  input = input,
                   target = target,
                }
             end,
             function(_sample_)
                sample = _sample_
             end,
-            indices,
-            self.nCrops
+            indices
          )
          idx = idx + batchSize
       end
