@@ -17,7 +17,15 @@ function M.setup(opt, checkpoint)
     assert(paths.filep(opt.hgModel),
         'initial hourglass model not found: ' .. opt.hgModel)
     model_hg = torch.load(opt.hgModel)
-    Model.loadHourglass(model, model_hg)
+
+    local lstm_nodes = model_hg:findModules('cudnn.LSTM')
+    if #lstm_nodes == 1 then
+      Model.loadHourglassLSTM(model, model_hg)
+    elseif #lstm_nodes == 0 then
+      Model.loadHourglass(model, model_hg)
+    else
+      error('initial hourglass model error')
+    end
   end
 
   -- Create criterion

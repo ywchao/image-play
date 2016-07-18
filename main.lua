@@ -24,7 +24,7 @@ optimState = nil
 -- TODO:
 -- Currently using cudnn's LSTM implementation
 nnlib = cudnn
-opt.hgModel = 'pose-hg-train/exp/penn_action_cropped/hg-single-no-skip-ft/final_model.t7'
+-- opt.hgModel = 'pose-hg-train/exp/penn_action_cropped/hg-single-no-skip-ft/final_model.t7'
 local model, criterion = models.setup(opt, checkpoint)
 
 -- Data loading
@@ -40,7 +40,7 @@ for epoch = startEpoch, opt.nEpochs do
   trainer:train(epoch, loaders['train'])
 
   -- Run model on validation set
-  local loss, macc = trainer:test(epoch, loaders['val'])
+  local loss, macc = trainer:test(epoch, loaders, 'val')
 
   checkpoints.save(epoch, model, trainer.optimState, nil, opt)
 end

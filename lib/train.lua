@@ -75,8 +75,11 @@ function Trainer:train(epoch, dataloader)
  
     -- Print and log
     local time = timer:time().real
-    print((' | Epoch: [%d][%d/%d]    Time %.3f  Data %.3f  loss1 %1.5f  loss2 %1.5f  acc1 %6.4f  acc2 %6.4f'):format(
-        epoch, i, size, time, dataTime, loss1, loss2, acc[1], acc[2]))
+    print((' | Epoch: [%d][%d/%d]    Time %.3f  Data %.3f  ' ..
+           'loss1 %1.5f  loss2 %1.5f  acc1 %6.4f  acc2 %6.4f'):format(
+               epoch, i, size, time, dataTime, loss1, loss2, acc[1], acc[2]
+           )
+    )
     self.logger['train']:add{
         ['epoch'] = string.format("%d" % epoch),
         ['iter'] = string.format("%d" % i),
@@ -93,11 +96,17 @@ function Trainer:train(epoch, dataloader)
   end
 end
 
-function Trainer:test(epoch, dataloader)
+function Trainer:test(epoch, loaders, split)
   local timer = torch.Timer()
   local dataTimer = torch.Timer()
   local testTimer = torch.Timer()
 
+  assert(split == 'val' or split == 'test',
+      'test() only supports validation and test set: to support training ' ..
+      'set, check the logging block to make sure training log will not be ' ..
+      'messed up'
+  )
+  local dataloader = loaders[split]
   local size = dataloader:size()
   local lossSum, maccSum = 0.0, 0.0
   local loss1Sum, loss2Sum, acc1Sum, acc2Sum = 0.0, 0.0, 0.0, 0.0
@@ -149,8 +158,14 @@ function Trainer:test(epoch, dataloader)
 
     -- Print and log
     local time = timer:time().real
-    print((' | Test: [%d][%d/%d]    Time %.3f  Data %.3f  loss1 %1.5f (%1.5f)  loss2 %1.5f (%1.5f)  acc1 %6.4f (%6.4f)  acc2 %6.4f (%6.4f)'):format(
-        epoch, i, size, time, dataTime, loss1, loss1Sum / N, loss2, loss2Sum / N, acc[1], acc1Sum / N, acc[2], acc2Sum / N))
+    print((' | Test: [%d][%d/%d]    Time %.3f  Data %.3f  ' ..
+           'loss1 %1.5f (%1.5f)  loss2 %1.5f (%1.5f)  ' ..
+           'acc1 %6.4f (%6.4f)  acc2 %6.4f (%6.4f)'):format(
+               epoch, i, size, time, dataTime,
+               loss1, loss1Sum / N, loss2, loss2Sum / N,
+               acc[1], acc1Sum / N, acc[2], acc2Sum / N
+           )
+    )
 
     timer:reset()
     dataTimer:reset()
@@ -158,10 +173,12 @@ function Trainer:test(epoch, dataloader)
   self.model:training()
 
   local testTime = testTimer:time().real
-  print((' * Finished epoch # %d    Time %.3f  loss1 %1.5f  loss2 %1.5f  acc1 %6.4f  acc2 %6.4f'):format(
-      epoch, testTime, loss1Sum / N, loss2Sum / N, acc1Sum / N, acc2Sum / N))
-  -- TODO: control for val and test
-  self.logger['val']:add{
+  print((' * Finished epoch # %d    Time %.3f  ' ..
+         'loss1 %1.5f  loss2 %1.5f  acc1 %6.4f  acc2 %6.4f'):format(
+         epoch, testTime, loss1Sum / N, loss2Sum / N, acc1Sum / N, acc2Sum / N
+         )
+  )
+  self.logger[split]:add{
       ['epoch'] = string.format("%d" % epoch),
       ['loss1'] = string.format("%.5f" % loss1Sum / N),
       ['loss2'] = string.format("%.5f" % loss2Sum / N),
