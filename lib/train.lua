@@ -180,10 +180,10 @@ function Trainer:test(epoch, loaders, split)
   )
   self.logger[split]:add{
       ['epoch'] = string.format("%d" % epoch),
-      ['loss1'] = string.format("%.5f" % loss1Sum / N),
-      ['loss2'] = string.format("%.5f" % loss2Sum / N),
-      ['acc1'] = string.format("%.4f" % acc1Sum / N),
-      ['acc2'] = string.format("%.4f" % acc2Sum / N),
+      ['loss1'] = string.format("%.5f" % (loss1Sum / N)),
+      ['loss2'] = string.format("%.5f" % (loss2Sum / N)),
+      ['acc1'] = string.format("%.4f" % (acc1Sum / N)),
+      ['acc2'] = string.format("%.4f" % (acc2Sum / N)),
       ['time'] = string.format("%.3f" % testTime),
   }
 
