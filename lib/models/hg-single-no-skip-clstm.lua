@@ -65,6 +65,21 @@ local function tieWeightBiasOneModule(module1, module2)
   end
 end
 
+-- function fixWeightBiasOneModule(module)
+--   if module.modules ~= nil then
+--     for i = 1, #module.modules do
+--       fixWeightBiasOneModule(module.modules[i])
+--     end
+--   end
+--   if module.weight ~= nil then
+--     assert(module.bias)
+--     assert(module.accGradParameters)
+--     -- TODO: remove accGradParametersBKP
+--     module.accGradParametersBKP = module.accGradParameters
+--     module.accGradParameters = function() end
+--   end
+-- end
+
 function M.createModel(opt, outputDim)
   -- Set params
   seqLength = opt.seqLength
@@ -153,6 +168,14 @@ function M.loadHourglass(model, model_hg)
     assert(name == name_hg, 'weight loading error: class name mismatch')
     tieWeightBiasOneModule(model_hg.modules[i], model.modules[i+off_ind])
   end
+
+  -- -- Fix weight and bias
+  -- for i = 1, enc_eind do
+  --   fixWeightBiasOneModule(model.modules[i])
+  -- end
+  -- for i = dec_sind, #model_hg.modules do
+  --   fixWeightBiasOneModule(model.modules[i+off_ind])
+  -- end
 
   -- Zero the gradients; not sure if this is necessary
   model:zeroGradParameters()
