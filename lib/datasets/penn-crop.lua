@@ -13,9 +13,9 @@ function PennCropDataset:__init(opt, split)
   assert(paths.dirp(self.dir), 'directory does not exist: ' .. self.dir)
   -- Load annotation
   annot_file = paths.concat(opt.data, split .. '.h5')
-  self.ind2sub = hdf5.open(annot_file):read('ind2sub'):all()
-  self.visible = hdf5.open(annot_file):read('visible'):all()
-  self.part = hdf5.open(annot_file):read('part'):all()
+  self.ind2sub = hdf5.open(annot_file,'r'):read('ind2sub'):all()
+  self.visible = hdf5.open(annot_file,'r'):read('visible'):all()
+  self.part = hdf5.open(annot_file,'r'):read('part'):all()
   -- Preprocess annotation
   self.seqId, self.nFrame = unpack(self:_preproAnno())
   -- Get phase number and LSTM sequence length
