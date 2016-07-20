@@ -19,7 +19,7 @@ function DataLoader.create(opt)
    -- The train and val loader
    local loaders = {}
 
-   for i, split in ipairs{'train', 'val'} do
+   for i, split in ipairs{'train', 'val', 'test'} do
       -- local dataset = Dataset(opt, split)
       -- loaders[split] = M.DataLoader(dataset, opt, split)
       loaders[split] = M.DataLoader(opt, split)
@@ -63,10 +63,20 @@ function DataLoader:size()
    return math.ceil(self.__size / self.batchSize)
 end
 
-function DataLoader:run()
+function DataLoader:sizeDataset()
+   return self.__size
+end
+
+function DataLoader:run(pred)
    local threads = self.threads
    local size, batchSize = self.__size, self.batchSize
-   local perm = torch.randperm(size)
+   local perm
+   if pred then
+      batchSize = 1
+      perm = torch.range(1, size)
+   else
+      perm = torch.randperm(size)
+   end
 
    local idx, sample = 1, nil
    local function enqueue()
@@ -87,28 +97,39 @@ function DataLoader:run()
                --    target = target,
                -- }
                local sz = indices:size(1)
+               local index = {}
                local input, imageSize
                local target, targetSizes
                for i, idx in ipairs(indices:totable()) do
+                  index[i] = idx
                   local sample = _G.dataset:get(idx)
                   if not input then
-                     imageSize = sample.input:size():totable()
-                     input = torch.FloatTensor(sz, unpack(imageSize))
+                     -- imageSize = sample.input:size():totable()
+                     -- input = torch.FloatTensor(sz, unpack(imageSize))
+                     imageSize = sample.input[1]:size():totable()
+                     input = {}
+                     for j = 1, #sample.input do
+                       input[j] = torch.FloatTensor(sz, unpack(imageSize))
+                     end
                   end
                   if not target then
                      targetSize = sample.target[1]:size():totable()
                      target = {}
                      for j = 1, #sample.target do
                        target[j] = torch.FloatTensor(sz, unpack(targetSize))
-                    end
+                     end
                   end
-                  input[i]:copy(sample.input)
+                  -- input[i]:copy(sample.input)
+                  for j = 1, #input do
+                    input[j][i] = sample.input[j]
+                  end
                   for j = 1, #target do
                     target[j][i] = sample.target[j]
                   end
                end
                collectgarbage()
                return {
+                  index = index,
                   input = input,
                   target = target,
                }

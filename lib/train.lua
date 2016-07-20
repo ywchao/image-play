@@ -39,7 +39,7 @@ function Trainer:train(epoch, dataloader)
     local dataTime = dataTimer:time().real
   
     -- Get input and target
-    local input = sample.input
+    local input = sample.input[1]
     local target = sample.target
 
     -- Convert to CUDA
@@ -117,7 +117,7 @@ function Trainer:test(epoch, loaders, split)
     local dataTime = dataTimer:time().real
 
     -- Get input and target
-    local input = sample.input
+    local input = sample.input[1]
     local target = sample.target
 
     -- Convert to CUDA
@@ -188,6 +188,54 @@ function Trainer:test(epoch, loaders, split)
   }
 
   return lossSum / N, maccSum / N
+end
+
+function Trainer:predict(loaders, split)
+  local dataloader = loaders[split]
+  local heatmaps
+
+  print("=> Generating predictions ...")
+  xlua.progress(0, dataloader:sizeDataset())
+
+  self.model:evaluate()
+  for i, sample in dataloader:run(true) do
+    -- Get input and target
+    local index = sample.index
+    local input = sample.input[1]
+    local target = sample.target
+
+    -- Convert to CUDA
+    input, target = self:convertCuda(input, target)
+
+    -- Forward pass
+    local output = self.model:forward(input)
+
+    -- Copy output
+    if not heatmaps then
+      local outputDim = target[1]:size(2)
+      heatmaps = torch.Tensor(
+          dataloader:sizeDataset(), self.opt.seqLength,
+          outputDim, self.opt.outputRes, self.opt.outputRes
+      )
+    end
+    assert(input:size(1) == 1, 'batch size must be 1 with run(true)')
+    for j = 1, #index do
+      for k = 1, #output do
+        -- fill(0) to heatmaps is too slow
+        -- assert(torch.all(heatmaps[index[j]][k]:eq(0)),
+        --     'overwriting heatmap in heatmaps')
+        heatmaps[index[j]][k]:copy(output[k][j])
+      end
+    end
+
+    xlua.progress(i, dataloader:sizeDataset())
+  end
+  self.model:training()
+
+  -- Save final predictions
+  local f = hdf5.open(self.opt.save .. '/preds_' .. split .. '.h5', 'w')
+  f:write('heatmaps', heatmaps)
+  f:close()
 end
 
 function Trainer:convertCuda(input, target)

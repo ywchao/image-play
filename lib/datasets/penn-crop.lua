@@ -91,8 +91,8 @@ function PennCropDataset:size()
 end
 
 function PennCropDataset:get(idx)
-  -- local input = {}
-  local input
+  local input = {}
+  -- local input
   local target = {}
   local img, center, scale
   local inp, out
@@ -117,17 +117,21 @@ function PennCropDataset:get(idx)
         drawGaussian(out[j], transform(torch.add(pts[j],1), center, scale, 0, self.outputRes), 2)
       end
     end
-    -- input[i] = inp
+    input[i] = inp
     -- We only need the first frame for input
-    if i == 1 then
-      input = torch.Tensor(inp:size()):copy(inp)
-    end
+    -- if i == 1 then
+    --   input = torch.Tensor(inp:size()):copy(inp)
+    -- end
     target[i] = out
   end
   return {
     input = input,
     target = target,
   }
+end
+
+function PennCropDataset:getSeqFrId(idx)
+  return self.ind2sub[idx][1], self.ind2sub[idx][2]
 end
 
 return M.PennCropDataset

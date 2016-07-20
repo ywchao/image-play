@@ -7,6 +7,7 @@ local models = require 'lib/models/init'
 local Trainer = require 'lib/train'
 local opts = require 'lib/opts'
 local checkpoints = require 'lib/checkpoints'
+local visualize = require 'lib/visualize'
 
 local opt = opts.parse(arg)
 
@@ -44,3 +45,9 @@ for epoch = startEpoch, opt.nEpochs do
 
   checkpoints.save(epoch, model, trainer.optimState, nil, opt)
 end
+
+-- Predict with the final model
+trainer:predict(loaders, 'val')
+
+-- Visualize prediction
+visualize.run(loaders, 'val', opt)
