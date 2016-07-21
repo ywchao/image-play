@@ -38,10 +38,11 @@ local trainer = Trainer(model, criterion, opt, optimState)
 local startEpoch = 1
 for epoch = startEpoch, opt.nEpochs do
   -- Train for a single epochoch
-  trainer:train(epoch, loaders['train'])
+  trainer:train(epoch, loaders)
 
-  -- Run model on validation set
-  local loss, macc = trainer:test(epoch, loaders, 'val')
+  -- Run model on validation set; move to train() for mid-epoch test
+  -- local iter = loaders['train']:size()
+  -- local loss, macc = trainer:test(epoch, iter, loaders, 'val')
 
   checkpoints.save(epoch, model, trainer.optimState, nil, opt)
 end

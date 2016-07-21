@@ -22,7 +22,7 @@ function Trainer:__init(model, criterion, opt, optimState)
   }
 end
 
-function Trainer:train(epoch, dataloader)
+function Trainer:train(epoch, loaders)
   local timer = torch.Timer()
   local dataTimer = torch.Timer()
 
@@ -30,9 +30,17 @@ function Trainer:train(epoch, dataloader)
     return self.criterion.output, self.gradParams
   end
 
+  local dataloader = loaders['train']
   local size = dataloader:size()
+  local testint = self.opt.testInt
+  local ntest = math.ceil(size / testint)
+  local itest = 1
+  local goal
 
-  print('=> Training epoch # ' .. epoch)
+  print(('=> Training epoch # %d [%d/%d]'):format(epoch, itest, ntest))
+  goal = (math.min((itest * testint), size) - 1) % testint + 1
+  xlua.progress(0, goal)
+
   -- Set the batch norm to training mode
   self.model:training()
   for i, sample in dataloader:run({augment=true}) do
@@ -75,11 +83,6 @@ function Trainer:train(epoch, dataloader)
  
     -- Print and log
     local time = timer:time().real
-    print((' | Epoch: [%d][%d/%d]    Time %.3f  Data %.3f  ' ..
-           'loss1 %1.5f  loss2 %1.5f  acc1 %6.4f  acc2 %6.4f'):format(
-               epoch, i, size, time, dataTime, loss1, loss2, acc[1], acc[2]
-           )
-    )
     self.logger['train']:add{
         ['epoch'] = string.format("%d" % epoch),
         ['iter'] = string.format("%d" % i),
@@ -93,12 +96,24 @@ function Trainer:train(epoch, dataloader)
   
     timer:reset()
     dataTimer:reset()
+
+    xlua.progress(((i - 1) % testint) + 1, goal)
+
+    -- Test on validation
+    if i % testint == 0 or i == size then
+      self:test(epoch, i, loaders, 'val')
+
+      if i ~= size then
+        itest = itest + 1
+        print(('=> Training epoch # %d [%d/%d]'):format(epoch, itest, ntest))
+        goal = (math.min((itest * testint), size) - 1) % testint + 1
+        xlua.progress(0, goal)
+      end
+    end
   end
 end
 
-function Trainer:test(epoch, loaders, split)
-  local timer = torch.Timer()
-  local dataTimer = torch.Timer()
+function Trainer:test(epoch, iter, loaders, split)
   local testTimer = torch.Timer()
 
   assert(split == 'val' or split == 'test',
@@ -112,10 +127,11 @@ function Trainer:test(epoch, loaders, split)
   local loss1Sum, loss2Sum, acc1Sum, acc2Sum = 0.0, 0.0, 0.0, 0.0
   local N = 0
 
+  print("=> Test on " .. split)
+  xlua.progress(0, size)
+
   self.model:evaluate()
   for i, sample in dataloader:run() do
-    local dataTime = dataTimer:time().real
-
     -- Get input and target
     local input = sample.input[1]
     local target = sample.target
@@ -156,30 +172,14 @@ function Trainer:test(epoch, loaders, split)
       N = N + batchSize
     end 
 
-    -- Print and log
-    local time = timer:time().real
-    print((' | Test: [%d][%d/%d]    Time %.3f  Data %.3f  ' ..
-           'loss1 %1.5f (%1.5f)  loss2 %1.5f (%1.5f)  ' ..
-           'acc1 %6.4f (%6.4f)  acc2 %6.4f (%6.4f)'):format(
-               epoch, i, size, time, dataTime,
-               loss1, loss1Sum / N, loss2, loss2Sum / N,
-               acc[1], acc1Sum / N, acc[2], acc2Sum / N
-           )
-    )
-
-    timer:reset()
-    dataTimer:reset()
+    xlua.progress(i, size)
   end
   self.model:training()
 
   local testTime = testTimer:time().real
-  print((' * Finished epoch # %d    Time %.3f  ' ..
-         'loss1 %1.5f  loss2 %1.5f  acc1 %6.4f  acc2 %6.4f'):format(
-         epoch, testTime, loss1Sum / N, loss2Sum / N, acc1Sum / N, acc2Sum / N
-         )
-  )
   self.logger[split]:add{
       ['epoch'] = string.format("%d" % epoch),
+      ['iter'] = string.format("%d" % iter),
       ['loss1'] = string.format("%.5f" % (loss1Sum / N)),
       ['loss2'] = string.format("%.5f" % (loss2Sum / N)),
       ['acc1'] = string.format("%.4f" % (acc1Sum / N)),
