@@ -31,21 +31,24 @@ end
 
 -- function DataLoader:__init(dataset, opt, split)
 function DataLoader:__init(opt, split)
-   -- local manualSeed = opt.manualSeed
+   local manualSeed = opt.manualSeed
    local function init()
       -- require('lib/datasets/' .. opt.dataset)
       -- We should have initialize dataset in creat(). This is currently not
       -- possible since the used hdf5 library will throw errors if we do that.
       local Dataset = require('lib/datasets/' .. opt.dataset)
       dataset = Dataset(opt, split)
+      augment = require('lib/augment')
    end
    local function main(idx)
-      -- this only matters if there is randomness in each thread
-      -- if manualSeed ~= 0 then
-      --    torch.manualSeed(manualSeed + idx)
-      -- end
+      -- This matters due to the thread-dependent randomness from data
+      -- augmentation
+      if manualSeed ~= 0 then
+         torch.manualSeed(manualSeed + idx)
+      end
       torch.setnumthreads(1)
       _G.dataset = dataset
+      _G.augment = augment
       return dataset:size()
    end
 
@@ -67,11 +70,11 @@ function DataLoader:sizeDataset()
    return self.__size
 end
 
-function DataLoader:run(pred)
+function DataLoader:run(kwargs)
    local threads = self.threads
    local size, batchSize = self.__size, self.batchSize
    local perm
-   if pred then
+   if kwargs ~= nil and kwargs.pred == true then
       batchSize = 1
       perm = torch.range(1, size)
    else
@@ -103,6 +106,10 @@ function DataLoader:run(pred)
                for i, idx in ipairs(indices:totable()) do
                   index[i] = idx
                   local sample = _G.dataset:get(idx)
+                  -- Augment data
+                  if kwargs ~= nil and kwargs.augment == true then
+                    _G.augment.run(sample.input, sample.target, _G.dataset:getMatchedParts())
+                  end
                   if not input then
                      -- imageSize = sample.input:size():totable()
                      -- input = torch.FloatTensor(sz, unpack(imageSize))

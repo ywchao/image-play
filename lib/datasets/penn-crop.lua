@@ -134,4 +134,9 @@ function PennCropDataset:getSeqFrId(idx)
   return self.ind2sub[idx][1], self.ind2sub[idx][2]
 end
 
+-- Get matched parts; for data augmentation
+function PennCropDataset:getMatchedParts()
+  return {{2,3},{4,5},{6,7},{8,9},{10,11},{12,13}}
+end
+
 return M.PennCropDataset

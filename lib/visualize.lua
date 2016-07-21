@@ -71,12 +71,12 @@ function M.run(loaders, split, opt)
   print("=> Visualizing predictions ...")
   xlua.progress(0, dataloader:sizeDataset())
 
-  for i, sample in dataloader:run(true) do
+  for i, sample in dataloader:run({pred=true}) do
     -- Get index and input
     local index = sample.index
     local input = sample.input
 
-    assert(input[1]:size(1) == 1, 'batch size must be 1 with run(true)')
+    assert(input[1]:size(1) == 1, 'batch size must be 1 with run({pred_true})')
     for j = 1, #index do
       -- Get sid and fid; the current code might be exclusive to penn-crop;
       -- need customization for different datasets later

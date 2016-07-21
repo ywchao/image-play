@@ -180,3 +180,16 @@ function colorHM(x)
     cl[cl:gt(1)] = 1
     return cl
 end
+
+-------------------------------------------------------------------------------
+-- Flipping functions
+-------------------------------------------------------------------------------
+
+function flip(x)
+    require 'image'
+    local y = torch.FloatTensor(x:size())
+    for i = 1, x:size(1) do
+        image.hflip(y[i], x[i]:float())
+    end
+    return y:typeAs(x)
+end

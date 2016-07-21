@@ -35,7 +35,7 @@ function Trainer:train(epoch, dataloader)
   print('=> Training epoch # ' .. epoch)
   -- Set the batch norm to training mode
   self.model:training()
-  for i, sample in dataloader:run() do
+  for i, sample in dataloader:run({augment=true}) do
     local dataTime = dataTimer:time().real
   
     -- Get input and target
@@ -198,7 +198,7 @@ function Trainer:predict(loaders, split)
   xlua.progress(0, dataloader:sizeDataset())
 
   self.model:evaluate()
-  for i, sample in dataloader:run(true) do
+  for i, sample in dataloader:run({pred=true}) do
     -- Get input and target
     local index = sample.index
     local input = sample.input[1]
@@ -218,7 +218,7 @@ function Trainer:predict(loaders, split)
           outputDim, self.opt.outputRes, self.opt.outputRes
       )
     end
-    assert(input:size(1) == 1, 'batch size must be 1 with run(true)')
+    assert(input:size(1) == 1, 'batch size must be 1 with run({pred=true})')
     for j = 1, #index do
       for k = 1, #output do
         -- fill(0) to heatmaps is too slow
