@@ -55,9 +55,13 @@ local function drawOutput(input, hms, coords, dataset)
   return im
 end
 
-function M.run(loaders, split, opt)
+function M.run(loaders, split, opt, seqlen)
+  seqlen = seqlen or opt.seqLength
+  assert(seqlen <= opt.seqLength, 'visualizing sequence length error')
+
   local Dataset = require('lib/datasets/' .. opt.dataset)
   local dataset = Dataset(opt, split)
+  local sidx = dataset:getSampledIdx()
 
   local dataloader = loaders[split]
   local vis_root = paths.concat(opt.save, 'preds_' .. split .. '_vis')
@@ -65,54 +69,52 @@ function M.run(loaders, split, opt)
   -- Load final predictions
   f = hdf5.open(opt.save .. '/preds_' .. split .. '.h5', 'r')
   heatmaps = f:read('heatmaps'):all()
-  assert(heatmaps:size(1) == loaders[split]:size())
+  assert(heatmaps:size(1) == loaders[split]:sizeSampled())
   assert(heatmaps:size(2) == opt.seqLength)
 
   print("=> Visualizing predictions ...")
-  xlua.progress(0, dataloader:sizeDataset())
+  xlua.progress(0, dataloader:sizeSampled())
 
-  for i, sample in dataloader:run({pred=true}) do
+  for i, sample in dataloader:run({pred=true,samp=true}) do
     -- Get index and input
-    local index = sample.index
     local input = sample.input
 
     assert(input[1]:size(1) == 1, 'batch size must be 1 with run({pred_true})')
-    for j = 1, #index do
-      -- Get sid and fid; the current code might be exclusive to penn-crop;
-      -- need customization for different datasets later
-      local sid, fid = dataset:getSeqFrId(index[j])
+    -- Get sid and fid; the current code might be exclusive to penn-crop;
+    -- need customization for different datasets later
+    local sid, fid = dataset:getSeqFrId(sidx[i])
 
-      local vis_dir = paths.concat(vis_root, ('%04d'):format(sid))
-      makedir(vis_dir)
+    local vis_dir = paths.concat(vis_root, ('%04d'):format(sid))
+    makedir(vis_dir)
 
-      for k = 1, opt.seqLength do
-        local vis_file = paths.concat(vis_dir,
-            ('%03d'):format(fid) .. '-' .. ('%02d'):format(k)) .. '.jpg'
-        if paths.filep(vis_file) then
-          goto continue
-        end
-
-        local inp = input[k][j]
-        local hm = heatmaps[index[j]][k]:clone()
-        hm[hm:lt(0)] = 0
-
-        -- Get predictions
-        local preds = getPreds(hm:view(1, hm:size(1), hm:size(2), hm:size(3)))
-        preds = preds[1]
-
-        -- Display and save the result
-        preds:mul(4)
-        local dispImg = drawOutput(inp:double(), hm, preds, opt.dataset)
-
-        -- Save output
-        image.save(vis_file, dispImg)
-
-        -- Continue
-        ::continue::
+    for j = 1, seqlen do
+      local vis_file = paths.concat(vis_dir,
+          ('%03d'):format(fid) .. '-' .. ('%02d'):format(j)) .. '.jpg'
+      if paths.filep(vis_file) then
+        goto continue
       end
+
+      -- Use first frame as background
+      local inp = input[1][1]
+      local hm = heatmaps[i][j]:clone()
+      hm[hm:lt(0)] = 0
+
+      -- Get predictions
+      local preds = getPreds(hm:view(1, hm:size(1), hm:size(2), hm:size(3)))
+      preds = preds[1]
+
+      -- Display and save the result
+      preds:mul(4)
+      local dispImg = drawOutput(inp:double(), hm, preds, opt.dataset)
+
+      -- Save output
+      image.save(vis_file, dispImg)
+
+      -- Continue
+      ::continue::
     end
 
-    xlua.progress(i, dataloader:sizeDataset())
+    xlua.progress(i, dataloader:sizeSampled())
   end
 end
 

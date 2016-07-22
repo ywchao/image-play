@@ -139,4 +139,20 @@ function PennCropDataset:getMatchedParts()
   return {{2,3},{4,5},{6,7},{8,9},{10,11},{12,13}}
 end
 
+-- Get sampled indices; for prediction and visualization
+function PennCropDataset:getSampledIdx()
+  local sidx
+  for i = 1, self.ind2sub:size(1) do
+    if self.ind2sub[i][2] == 1 then
+      local phaseSeq = self:_getPhaseSeq(i)
+      if not sidx then
+        sidx = phaseSeq
+      else
+        sidx = torch.cat(sidx, phaseSeq, 1)
+      end
+    end
+  end
+  return sidx
+end
+
 return M.PennCropDataset

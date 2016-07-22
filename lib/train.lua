@@ -7,7 +7,6 @@ local M = {}
 local Trainer = torch.class('image-play.Trainer', M)
 
 function Trainer:__init(model, criterion, opt, optimState)
-  assert(opt.seqLength == 2, 'currently supports seqLength = 2 only')
   self.model = model
   self.criterion = criterion
   self.optimState = optimState or {
@@ -20,6 +19,23 @@ function Trainer:__init(model, criterion, opt, optimState)
     train = optim.Logger(paths.concat(opt.save, 'train.log')),
     val = optim.Logger(paths.concat(opt.save, 'val.log'))
   }
+  self:initLogger(self.logger['train'])
+  self:initLogger(self.logger['val'])
+end
+
+function Trainer:initLogger(logger)
+  local names = {}
+  names[1] = 'epoch'
+  names[2] = 'iter'
+  names[3] = 'time'
+  names[4] = 'datTime'
+  for i = 1, self.opt.seqLength do
+    names[#names+1] = 'loss' .. i
+  end
+  for i = 1, self.opt.seqLength do
+    names[#names+1] = 'acc' .. i
+  end
+  logger:setNames(names)
 end
 
 function Trainer:train(epoch, loaders)
@@ -30,6 +46,9 @@ function Trainer:train(epoch, loaders)
     return self.criterion.output, self.gradParams
   end
 
+  -- Set criterion weight for curriculum learning
+  self:setCriterionWeight(epoch)
+
   local dataloader = loaders['train']
   local size = dataloader:size()
   local testint = self.opt.testInt
@@ -37,7 +56,10 @@ function Trainer:train(epoch, loaders)
   local itest = 1
   local goal
 
-  print(('=> Training epoch # %d [%d/%d]'):format(epoch, itest, ntest))
+  print(('=> Training epoch # %d [%d/%d], seq %d'):format(
+            epoch, itest, ntest, self.seqlen
+         )
+  )
   goal = (math.min((itest * testint), size) - 1) % testint + 1
   xlua.progress(0, goal)
 
@@ -55,9 +77,15 @@ function Trainer:train(epoch, loaders)
   
     -- Forward pass
     local output = self.model:forward(input)
-    local loss = self.criterion:forward(self.model.output, target)
-    local loss1 = self.criterion.criterions[1].output
-    local loss2 = self.criterion.criterions[2].output
+    local loss_sum = self.criterion:forward(self.model.output, target)
+    local loss = {}
+    for j = 1, #output do
+      if j <= self.seqlen then
+        loss[j] = self.criterion.criterions[j].output
+      else
+        loss[j] = 0
+      end
+    end
 
     -- Backprop
     self.model:zeroGradParameters()
@@ -70,29 +98,28 @@ function Trainer:train(epoch, loaders)
     -- Compute accuracy
     local acc = {}
     for j = 1, #output do
-      acc[j] = self:computeAccuracy(output[j]:contiguous(), target[j])
+      if j <= self.seqlen then
+        acc[j] = self:computeAccuracy(output[j]:contiguous(), target[j])
+      else
+        acc[j] = 0/0
+      end
     end
     acc = torch.Tensor(acc)
-    -- Mean accuracy; ignore nan
-    local macc
-    if torch.all(acc:ne(acc)) then
-      macc = 0/0
-    else
-      macc = torch.mean(acc[acc:eq(acc)])
-    end
- 
+
     -- Print and log
     local time = timer:time().real
-    self.logger['train']:add{
-        ['epoch'] = string.format("%d" % epoch),
-        ['iter'] = string.format("%d" % i),
-        ['loss1'] = string.format("%.5f" % loss1),
-        ['loss2'] = string.format("%.5f" % loss2),
-        ['acc1'] = string.format("%.4f" % acc[1]),
-        ['acc2'] = string.format("%.4f" % acc[2]),
-        ['time'] = string.format("%.3f" % time),
-        ['dataTime'] = string.format("%.3f" % dataTime)
-    }
+    local entry = {}
+    entry[1] = string.format("%d" % epoch)
+    entry[2] = string.format("%d" % i)
+    entry[3] = string.format("%.3f" % time)
+    entry[4] = string.format("%.3f" % dataTime)
+    for j = 1, self.opt.seqLength do
+      entry[#entry+1] = string.format("%.5f" % loss[j])
+    end
+    for j = 1, self.opt.seqLength do
+      entry[#entry+1] = string.format("%.5f" % acc[j])
+    end
+    self.logger['train']:add(entry)
   
     timer:reset()
     dataTimer:reset()
@@ -105,7 +132,10 @@ function Trainer:train(epoch, loaders)
 
       if i ~= size then
         itest = itest + 1
-        print(('=> Training epoch # %d [%d/%d]'):format(epoch, itest, ntest))
+        print(('=> Training epoch # %d [%d/%d], seq %d'):format(
+                   epoch, itest, ntest, self.seqlen
+               )
+        )
         goal = (math.min((itest * testint), size) - 1) % testint + 1
         xlua.progress(0, goal)
       end
@@ -123,8 +153,11 @@ function Trainer:test(epoch, iter, loaders, split)
   )
   local dataloader = loaders[split]
   local size = dataloader:size()
-  local lossSum, maccSum = 0.0, 0.0
-  local loss1Sum, loss2Sum, acc1Sum, acc2Sum = 0.0, 0.0, 0.0, 0.0
+  local lossSum, accSum = {}, {}
+  for i = 1, self.opt.seqLength do
+    lossSum[i] = 0.0
+    accSum[i] = 0.0
+  end
   local N = 0
 
   print("=> Test on " .. split)
@@ -141,34 +174,32 @@ function Trainer:test(epoch, iter, loaders, split)
 
     -- Forward pass
     local output = self.model:forward(input)
-    local loss = self.criterion:forward(self.model.output, target)
-    local loss1 = self.criterion.criterions[1].output
-    local loss2 = self.criterion.criterions[2].output
+    local loss_sum = self.criterion:forward(self.model.output, target)
+    local loss = {}
+    for j = 1, #output do
+      if j <= self.seqlen then
+        loss[j] = self.criterion.criterions[j].output
+      else
+        loss[j] = 0
+      end
+    end
 
     -- Compute accuracy
     local acc = {}
     for j = 1, #output do
-      acc[j] = self:computeAccuracy(output[j], target[j])
+      if j <= self.seqlen then
+        acc[j] = self:computeAccuracy(output[j], target[j])
+      else
+        acc[j] = 0/0
+      end
     end
     acc = torch.Tensor(acc)
-    -- Mean accuracy; ignore nan
-    local macc
-    if torch.all(acc:ne(acc)) then
-      macc = 0/0
-    else
-      macc = torch.mean(acc[acc:eq(acc)])
-      
-      -- local batchSize = input:size(1)
-      -- lossSum = lossSum + loss*batchSize
-      -- maccSum = maccSum + macc*batchSize
-      -- N = N + batchSize
-    end
-    if torch.all(acc:eq(acc)) then
+    if torch.all(acc:sub(1,self.seqlen):eq(acc:sub(1,self.seqlen))) then
       local batchSize = input:size(1)
-      loss1Sum = loss1Sum + loss1*batchSize
-      loss2Sum = loss2Sum + loss2*batchSize
-      acc1Sum = acc1Sum + acc[1]*batchSize
-      acc2Sum = acc2Sum + acc[2]*batchSize
+      for j = 1, self.opt.seqLength do
+        lossSum[j] = lossSum[j] + loss[j]
+        accSum[j] = accSum[j] + acc[j]
+      end
       N = N + batchSize
     end 
 
@@ -176,18 +207,26 @@ function Trainer:test(epoch, iter, loaders, split)
   end
   self.model:training()
 
-  local testTime = testTimer:time().real
-  self.logger[split]:add{
-      ['epoch'] = string.format("%d" % epoch),
-      ['iter'] = string.format("%d" % iter),
-      ['loss1'] = string.format("%.5f" % (loss1Sum / N)),
-      ['loss2'] = string.format("%.5f" % (loss2Sum / N)),
-      ['acc1'] = string.format("%.4f" % (acc1Sum / N)),
-      ['acc2'] = string.format("%.4f" % (acc2Sum / N)),
-      ['time'] = string.format("%.3f" % testTime),
-  }
+  -- Compute mean loss and accuracy
+  for i = 1, self.opt.seqLength do
+    lossSum[i] = lossSum[i] / N
+    accSum[i] = accSum[i] / N
+  end
 
-  return lossSum / N, maccSum / N
+  -- Print and log
+  local testTime = testTimer:time().real
+  local entry = {}
+  entry[1] = string.format("%d" % epoch)
+  entry[2] = string.format("%d" % iter)
+  entry[3] = string.format("%.3f" % testTime)
+  entry[4] = string.format("%d" % 0/0)
+  for j = 1, self.opt.seqLength do
+    entry[#entry+1] = string.format("%.5f" % lossSum[j])
+  end
+  for j = 1, self.opt.seqLength do
+    entry[#entry+1] = string.format("%.5f" % accSum[j])
+  end
+  self.logger[split]:add(entry)
 end
 
 function Trainer:predict(loaders, split)
@@ -195,12 +234,11 @@ function Trainer:predict(loaders, split)
   local heatmaps
 
   print("=> Generating predictions ...")
-  xlua.progress(0, dataloader:sizeDataset())
+  xlua.progress(0, dataloader:sizeSampled())
 
   self.model:evaluate()
-  for i, sample in dataloader:run({pred=true}) do
+  for i, sample in dataloader:run({pred=true,samp=true}) do
     -- Get input and target
-    local index = sample.index
     local input = sample.input[1]
     local target = sample.target
 
@@ -214,21 +252,16 @@ function Trainer:predict(loaders, split)
     if not heatmaps then
       local outputDim = target[1]:size(2)
       heatmaps = torch.Tensor(
-          dataloader:sizeDataset(), self.opt.seqLength,
+          dataloader:sizeSampled(), self.opt.seqLength,
           outputDim, self.opt.outputRes, self.opt.outputRes
       )
     end
     assert(input:size(1) == 1, 'batch size must be 1 with run({pred=true})')
-    for j = 1, #index do
-      for k = 1, #output do
-        -- fill(0) to heatmaps is too slow
-        -- assert(torch.all(heatmaps[index[j]][k]:eq(0)),
-        --     'overwriting heatmap in heatmaps')
-        heatmaps[index[j]][k]:copy(output[k][j])
-      end
+    for j = 1, #output do
+      heatmaps[i][j]:copy(output[j][1])
     end
 
-    xlua.progress(i, dataloader:sizeDataset())
+    xlua.progress(i, dataloader:sizeSampled())
   end
   self.model:training()
 
@@ -236,6 +269,22 @@ function Trainer:predict(loaders, split)
   local f = hdf5.open(self.opt.save .. '/preds_' .. split .. '.h5', 'w')
   f:write('heatmaps', heatmaps)
   f:close()
+end
+
+function Trainer:setCriterionWeight(epoch)
+  local seqlen
+  -- Start len from 2 and no larger than data sequence length
+  -- seqlen = math.ceil(epoch / self.opt.currInt) + 1
+  seqlen = 2 ^ math.ceil(epoch / self.opt.currInt)
+  seqlen = math.min(seqlen, self.opt.seqLength)
+  for i = 1, #self.criterion.weights do
+    if i <= seqlen then
+      self.criterion.weights[i] = 1
+    else
+      self.criterion.weights[i] = 0
+    end
+  end
+  self.seqlen = seqlen
 end
 
 function Trainer:convertCuda(input, target)

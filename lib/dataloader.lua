@@ -49,12 +49,13 @@ function DataLoader:__init(opt, split)
       torch.setnumthreads(1)
       _G.dataset = dataset
       _G.augment = augment
-      return dataset:size()
+      return dataset:size(), dataset:getSampledIdx()
    end
 
-   local threads, sizes = Threads(opt.nThreads, init, main)
+   local threads, outputs = Threads(opt.nThreads, init, main)
    self.threads = threads
-   self.__size = sizes[1][1]
+   self.__size = outputs[1][1]
+   self.sidx = outputs[1][2]
    if split == 'train' then
      self.batchSize = opt.batchSize
    else
@@ -70,6 +71,10 @@ function DataLoader:sizeDataset()
    return self.__size
 end
 
+function DataLoader:sizeSampled()
+   return self.sidx:numel()
+end
+
 function DataLoader:run(kwargs)
    local threads = self.threads
    local size, batchSize = self.__size, self.batchSize
@@ -79,6 +84,12 @@ function DataLoader:run(kwargs)
       perm = torch.range(1, size)
    else
       perm = torch.randperm(size)
+   end
+   if kwargs ~= nil and kwargs.samp == true then
+      assert(kwargs.pred == true, 'kwargs error: require pred == true if samp == true')
+      batchSize = 1
+      perm = self.sidx
+      size = self.sidx:numel()
    end
 
    local idx, sample = 1, nil
@@ -100,11 +111,11 @@ function DataLoader:run(kwargs)
                --    target = target,
                -- }
                local sz = indices:size(1)
-               local index = {}
+               -- local index = {}
                local input, imageSize
                local target, targetSizes
                for i, idx in ipairs(indices:totable()) do
-                  index[i] = idx
+                  -- index[i] = idx
                   local sample = _G.dataset:get(idx)
                   -- Augment data
                   if kwargs ~= nil and kwargs.augment == true then
@@ -136,7 +147,7 @@ function DataLoader:run(kwargs)
                end
                collectgarbage()
                return {
-                  index = index,
+                  -- index = index,
                   input = input,
                   target = target,
                }
