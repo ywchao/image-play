@@ -1,4 +1,3 @@
-require 'nngraph'
 require 'lib/models/Residual'
 
 M = {}

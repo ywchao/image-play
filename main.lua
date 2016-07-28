@@ -11,21 +11,17 @@ local visualize = require 'lib/visualize'
 
 local opt = opts.parse(arg)
 
+-- Load previous checkpoint, if it exists
+local checkpoint, optimState, opt = checkpoints.latest(opt)
+
 cutorch.setDevice(opt.GPU)
 torch.manualSeed(opt.manualSeed)
 -- cutorch.manualSeedAll(opt.manualSeed)
-
--- Load previous checkpoint, if it exists
--- TODO:
--- local checkpoint, optimState = checkpoints.latest(opt)
-checkpoint = nil
-optimState = nil
 
 -- Create model
 -- TODO:
 -- Currently using cudnn's LSTM implementation
 nnlib = cudnn
--- opt.hgModel = 'pose-hg-train/exp/penn_action_cropped/hg-single-no-skip-ft/final_model.t7'
 local model, criterion = models.setup(opt, checkpoint)
 
 -- Data loading
@@ -34,8 +30,7 @@ local loaders = DataLoader.create(opt)
 -- The trainer handles the training loop and evaluation on validation set
 local trainer = Trainer(model, criterion, opt, optimState)
 
--- local startEpoch = checkpoint and checkpoint.epoch + 1 or opt.epochNumber
-local startEpoch = 1
+local startEpoch = checkpoint and checkpoint.epoch + 1 or 1
 for epoch = startEpoch, opt.nEpochs do
   -- Train for a single epochoch
   trainer:train(epoch, loaders)

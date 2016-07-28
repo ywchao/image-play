@@ -9,21 +9,38 @@
 
 local checkpoint = {}
 
--- function checkpoint.latest(opt)
---    if opt.resume == 'none' then
---       return nil
---    end
---
---    local latestPath = paths.concat(opt.resume, 'latest.t7')
---    if not paths.filep(latestPath) then
---       return nil
---    end
---
---    print('=> Loading checkpoint ' .. latestPath)
---    local latest = torch.load(latestPath)
---    local optimState = torch.load(paths.concat(opt.resume, latest.optimFile))
---    return latest, optimState
--- end
+function checkpoint.latest(opt)
+   if not opt.resume then
+      return nil, nil, opt
+   end
+
+   local latestPath = paths.concat(opt.save, 'latest.t7')
+   if not paths.filep(latestPath) then
+      return nil, nil, opt
+   end
+
+   print('=> Loading checkpoint ' .. latestPath)
+   local latest = torch.load(latestPath)
+   local optimState = torch.load(paths.concat(opt.save, latest.optimFile))
+
+   -- Get manually set options
+   local setOpts = {}
+   for i = 1, #arg do
+      if arg[i]:sub(1,1) == '-' then
+         table.insert(setOpts,arg[i]:sub(2,-1))
+      end
+   end
+
+   -- Keep previous option, except those that are manually set
+   local opt_ = opt
+   opt = torch.load(paths.concat(opt.save, latest.optFile))
+   opt.resume = true
+   for i = 1, #setOpts do
+      opt[setOpts[i]] = opt_[setOpts[i]]
+   end
+
+   return latest, optimState, opt
+end
 
 function checkpoint.save(epoch, model, optimState, isBestModel, opt)
    -- Remove temporary buffers to reduce checkpoint size
@@ -36,13 +53,16 @@ function checkpoint.save(epoch, model, optimState, isBestModel, opt)
 
    local modelFile = 'model_' .. epoch .. '.t7'
    local optimFile = 'optimState_' .. epoch .. '.t7'
+   local optFile = 'options.t7'
 
    torch.save(paths.concat(opt.save, modelFile), model)
    torch.save(paths.concat(opt.save, optimFile), optimState)
+   torch.save(paths.concat(opt.save, optFile), opt)
    torch.save(paths.concat(opt.save, 'latest.t7'), {
       epoch = epoch,
       modelFile = modelFile,
       optimFile = optimFile,
+      optFile = optFile,
    })
 
    if isBestModel then

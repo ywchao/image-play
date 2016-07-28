@@ -2,6 +2,7 @@ require 'cunn'
 require 'cudnn'
 require 'optim'
 require 'lib/util/eval'
+require 'lib/util/Logger'
 
 local M = {}
 local Trainer = torch.class('image-play.Trainer', M)
@@ -16,8 +17,8 @@ function Trainer:__init(model, criterion, opt, optimState)
   self.opt = opt
   self.params, self.gradParams = model:getParameters()
   self.logger = {
-    train = optim.Logger(paths.concat(opt.save, 'train.log')),
-    val = optim.Logger(paths.concat(opt.save, 'val.log'))
+    train = Logger(paths.concat(opt.save, 'train.log'), opt.resume),
+    val = Logger(paths.concat(opt.save, 'val.log'), opt.resume)
   }
   self:initLogger(self.logger['train'])
   self:initLogger(self.logger['val'])
