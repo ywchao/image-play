@@ -10,13 +10,34 @@ local function drawSkeleton(input, hms, coords, dataset)
 
   local pairRef, partNames, partColor, partColor, actThresh
   if dataset == 'penn-crop' then
+    -- Interpolate thorax and pelvis
+    local thms = hms
+    local tcoords = coords
+    coords = torch.Tensor(15,2)
+    coords = coords:type(tcoords:type())
+    coords:narrow(1,1,13):copy(tcoords)
+    coords[14] = torch.mean(coords[{{2,3}}],1)
+    coords[15] = torch.mean(coords[{{8,9}}],1)
+    hms = torch.Tensor(15,thms:size(2),thms:size(3))
+    hms = hms:type(thms:type())
+    hms:narrow(1,1,13):copy(thms)
+    local d142 = (coords[14]-coords[2]):div(4):round()
+    local d143 = (coords[14]-coords[3]):div(4):round()
+    local d158 = (coords[15]-coords[8]):div(4):round()
+    local d159 = (coords[15]-coords[9]):div(4):round()
+    hms[14] = (image.translate(hms[2],d142[1],d142[2]) +
+               image.translate(hms[3],d143[1],d143[2])) / 2
+    hms[15] = (image.translate(hms[8],d158[1],d158[2]) +
+               image.translate(hms[9],d159[1],d159[2])) / 2
+
     pairRef = {
-        {2,1},{3,1},{4,2},{5,3},{6,4},{7,5},
-        {8,2},{9,3},{10,8},{11,9},{12,10},{13,11}
+        {14,1},{2,14},{3,14},{4,2},{5,3},{6,4},{7,5},
+        {15,14},{8,15},{9,15},{10,8},{11,9},{12,10},{13,11}
     }
     partNames = {'Head','RSho','LSho','RElb','LElb','RWri','LWri',
-                       'RHip','LHip','RKne','LKne','RAnk','LAnk'}
-    partColor = {0,0,0,3,4,3,4,0,0,1,2,1,2}
+                        'RHip','LHip','RKne','LKne','RAnk','LAnak',
+                        'Thrx','Pelv'}
+    partColor = {0,3,4,3,4,3,4,1,2,1,2,1,2,0,0}
     actThresh = 0.002
   else
     error('unknown dataset')
@@ -37,11 +58,11 @@ local function drawSkeleton(input, hms, coords, dataset)
       im = drawLine(im, coords[pairRef[i][1]], coords[pairRef[i][2]], 4, color, 0)
     end
   end
-  return im
+  return im, hms, coords
 end
 
 local function drawOutput(input, hms, coords, dataset)
-  local im = drawSkeleton(input, hms, coords, dataset)
+  local im, hms, coords = drawSkeleton(input, hms, coords, dataset)
 
   local colorHms = {}
   local inp64 = image.scale(input,64):mul(.3)
