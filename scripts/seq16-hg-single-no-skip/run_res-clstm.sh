@@ -8,7 +8,7 @@ fi
 
 th main.lua \
   -GPU $gpu_id \
-  -expID seq2-fix-hg-no-skip-clstm \
-  -nEpochs 10 \
-  -netType hg-single-no-skip-clstm \
+  -expID seq16-hg-single-no-skip-res-clstm \
+  -nEpochs 4 \
+  -netType hg-single-no-skip-res-clstm \
   -hgModel pose-hg-train/exp/penn_action_cropped/hg-single-no-skip-ft/final_model.t7
