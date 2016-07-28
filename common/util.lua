@@ -39,3 +39,9 @@ function unique(input)
   table.sort(out)
   return torch.Tensor(out)
 end
+
+function find(X, n)
+-- X should be a one dimensional tensor
+  local indices = torch.linspace(1,X:size(1),X:size(1)):long()
+  return indices[X:eq(n)]
+end

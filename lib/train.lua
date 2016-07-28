@@ -231,6 +231,7 @@ end
 
 function Trainer:predict(loaders, split)
   local dataloader = loaders[split]
+  local sidx = torch.LongTensor(dataloader:sizeSampled())
   local heatmaps
 
   print("=> Generating predictions ...")
@@ -239,6 +240,7 @@ function Trainer:predict(loaders, split)
   self.model:evaluate()
   for i, sample in dataloader:run({pred=true,samp=true}) do
     -- Get input and target
+    local index = sample.index
     local input = sample.input[1]
     local target = sample.target
 
@@ -251,12 +253,13 @@ function Trainer:predict(loaders, split)
     -- Copy output
     if not heatmaps then
       local outputDim = target[1]:size(2)
-      heatmaps = torch.Tensor(
+      heatmaps = torch.FloatTensor(
           dataloader:sizeSampled(), self.opt.seqLength,
           outputDim, self.opt.outputRes, self.opt.outputRes
       )
     end
     assert(input:size(1) == 1, 'batch size must be 1 with run({pred=true})')
+    sidx[i] = index[1]
     for j = 1, #output do
       heatmaps[i][j]:copy(output[j][1])
     end
@@ -264,6 +267,10 @@ function Trainer:predict(loaders, split)
     xlua.progress(i, dataloader:sizeSampled())
   end
   self.model:training()
+
+  -- Sort heatmaps by index
+  local sidx, i = torch.sort(sidx)
+  heatmaps = heatmaps:index(1, i)
 
   -- Save final predictions
   local f = hdf5.open(self.opt.save .. '/preds_' .. split .. '.h5', 'w')

@@ -111,11 +111,11 @@ function DataLoader:run(kwargs)
                --    target = target,
                -- }
                local sz = indices:size(1)
-               -- local index = {}
+               local index = {}
                local input, imageSize
                local target, targetSizes
                for i, idx in ipairs(indices:totable()) do
-                  -- index[i] = idx
+                  index[i] = idx
                   local sample = _G.dataset:get(idx)
                   -- Augment data
                   if kwargs ~= nil and kwargs.augment == true then
@@ -147,7 +147,7 @@ function DataLoader:run(kwargs)
                end
                collectgarbage()
                return {
-                  -- index = index,
+                  index = index,
                   input = input,
                   target = target,
                }

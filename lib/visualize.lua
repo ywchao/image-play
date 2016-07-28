@@ -77,6 +77,7 @@ function M.run(loaders, split, opt, seqlen)
 
   for i, sample in dataloader:run({pred=true,samp=true}) do
     -- Get index and input
+    local index = sample.index
     local input = sample.input
 
     assert(input[1]:size(1) == 1, 'batch size must be 1 with run({pred_true})')
@@ -96,7 +97,11 @@ function M.run(loaders, split, opt, seqlen)
 
       -- Use first frame as background
       local inp = input[1][1]
-      local hm = heatmaps[i][j]:clone()
+
+      -- Get heatmap
+      local idx = find(sidx, index[1])
+      assert(idx:numel() == 1, 'index not found')
+      local hm = heatmaps[idx[1]][j]:clone()
       hm[hm:lt(0)] = 0
 
       -- Get predictions
