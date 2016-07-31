@@ -3,13 +3,24 @@ figure(1);
 % choose experiment
 
 % exp_name = 'seq16-hg-single-no-skip-clstm';
+% epoch_size = 19690;
+% disp_int = 1000;
+
 % exp_name = 'seq16-hg-single-no-skip-res-clstm';
+% epoch_size = 19690;
+% disp_int = 1000;
+
+% exp_name = 'seq16-hg-256-clstm';
+% epoch_size = 19690;
+% disp_int = 1000;
+
+% exp_name = 'seq16-hg-256-res-clstm';
+% epoch_size = 26253;
+% disp_int = 1500;
 
 % set parameters
-disp_int = 1000;
 max_epoch = 4;
 
-epoch_size = 19690;
 seq_length = 16;
 format = ['%s %s %s %s' repmat(' %s %s',[1,seq_length])];
 
@@ -36,8 +47,8 @@ for i = 1:max_epoch
     % sample index uniformly
     ind = [ind; ii(1:disp_int:numel(ii))];  %#ok
     % add the last iter of each epoch
-    if ismember(epoch_size, ii) && ~ismember(epoch_size, ind)
-        ind = [ind; epoch_size];  %#ok
+    if ismember(epoch_size*i, ii) && ~ismember(epoch_size*i, ind)
+        ind = [ind; epoch_size*i];  %#ok
     end
 end
 it = (epoch(ind)-1)*epoch_size + iter(ind);
@@ -53,6 +64,7 @@ for i = 3:16
     plot(it_t,loss(ind_t,i),'color',[1-clr,0,clr]);
 end
 grid on;
+axis([0 it(end) ylim]);
 title('training loss');
 xlabel('iteration');
 
@@ -67,6 +79,7 @@ for i = 3:16
     plot(it_t,acc(ind_t,i),'color',[1-clr,0,clr]);
 end
 grid on;
+axis([0 it(end) 0 1]);
 title('training accuracy');
 xlabel('iteration');
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -85,45 +98,39 @@ end
 
 it = (epoch-1)*epoch_size + iter;
 
-subplot(2,2,1);
-lim = [xlim, ylim];
 subplot(2,2,3);
-plot(it,loss(:,1),'--ro'); hold on;
-plot(it,loss(:,2),'-ro');
+plot(it,loss(:,1),'--ro','MarkerSize',3); hold on;
+plot(it,loss(:,2),'-ro','MarkerSize',3);
 for i = 3:16
     it_t = it(loss(:,i) ~= 0);
     ind_t = loss(:,i) ~= 0;
     clr = (i-2)/(seq_length-2);
     % clr = (i-2)/(8-2);
-    plot(it_t,loss(ind_t,i),'-o','color',[1-clr,0,clr]);
+    plot(it_t,loss(ind_t,i),'-o','color',[1-clr,0,clr],'MarkerSize',3);
 end
-axis(lim);
 grid on;
 title('validation loss');
 xlabel('iteration');
 
-subplot(2,2,2);
-lim = [xlim, ylim];
 subplot(2,2,4);
-plot(it,acc(:,1),'--ro'); hold on;
-plot(it,acc(:,2),'-ro');
+plot(it,acc(:,1),'--ro','MarkerSize',3); hold on;
+plot(it,acc(:,2),'-ro','MarkerSize',3);
 for i = 3:16
     it_t = it(~isnan(acc(:,i)));
     ind_t = ~isnan(acc(:,i));
     clr = (i-2)/(seq_length-2);
     % clr = (i-2)/(8-2);
-    plot(it_t,acc(ind_t,i),'-o','color',[1-clr,0,clr]);
+    plot(it_t,acc(ind_t,i),'-o','color',[1-clr,0,clr],'MarkerSize',3);
 end
-axis(lim);
 grid on;
 title('validation accuracy');
 xlabel('iteration');
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-subplot(2,2,1); set(gca,'fontsize',8);
-subplot(2,2,2); set(gca,'fontsize',8);
-subplot(2,2,3); set(gca,'fontsize',8);
-subplot(2,2,4); set(gca,'fontsize',8);
+subplot(2,2,1); set(gca,'fontsize',6);
+subplot(2,2,2); set(gca,'fontsize',6);
+subplot(2,2,3); set(gca,'fontsize',6);
+subplot(2,2,4); set(gca,'fontsize',6);
 
 subplot(2,2,1);
 lim = [xlim, ylim];
