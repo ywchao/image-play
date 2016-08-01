@@ -21,14 +21,16 @@ local function drawSkeleton(input, hms, coords, dataset)
     hms = torch.Tensor(15,thms:size(2),thms:size(3))
     hms = hms:type(thms:type())
     hms:narrow(1,1,13):copy(thms)
-    local d142 = (coords[14]-coords[2]):div(4):round()
-    local d143 = (coords[14]-coords[3]):div(4):round()
-    local d158 = (coords[15]-coords[8]):div(4):round()
-    local d159 = (coords[15]-coords[9]):div(4):round()
-    hms[14] = (image.translate(hms[2],d142[1],d142[2]) +
-               image.translate(hms[3],d143[1],d143[2])) / 2
-    hms[15] = (image.translate(hms[8],d158[1],d158[2]) +
-               image.translate(hms[9],d159[1],d159[2])) / 2
+    -- local d142 = (coords[14]-coords[2]):div(4):round()
+    -- local d143 = (coords[14]-coords[3]):div(4):round()
+    -- local d158 = (coords[15]-coords[8]):div(4):round()
+    -- local d159 = (coords[15]-coords[9]):div(4):round()
+    -- hms[14] = (image.translate(hms[2],d142[1],d142[2]) +
+    --            image.translate(hms[3],d143[1],d143[2])) / 2
+    -- hms[15] = (image.translate(hms[8],d158[1],d158[2]) +
+    --            image.translate(hms[9],d159[1],d159[2])) / 2
+    hms[14]:fill(math.min(hms[2]:mean(),hms[3]:mean()))
+    hms[15]:fill(math.min(hms[8]:mean(),hms[8]:mean()))
 
     pairRef = {
         {14,1},{2,14},{3,14},{4,2},{5,3},{6,4},{7,5},
