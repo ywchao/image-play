@@ -6,8 +6,7 @@ else
   gpu_id=$1
 fi
 
-th main.lua \
-  -GPU $gpu_id \
+CUDA_VISIBLE_DEVICES=$gpu_id th main.lua \
   -expID seq16-hg-single-no-skip-clstm-init \
   -nEpochs 4 \
   -netType hg-single-no-skip-clstm \

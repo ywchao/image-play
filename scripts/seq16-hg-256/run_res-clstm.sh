@@ -6,8 +6,7 @@ else
   gpu_id=$1
 fi
 
-th main.lua \
-  -GPU $gpu_id \
+CUDA_VISIBLE_DEVICES=$gpu_id th main.lua \
   -expID seq16-hg-256-res-clstm \
   -nThreads 1 \
   -nEpochs 4 \
