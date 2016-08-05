@@ -8,10 +8,36 @@ config;
 % frame_root = './exp/penn-crop/seq16-hg-single-no-skip-clstm/preds_val_vis/';
 % vis_root = ['./outputs/preds_val_fr' num2str(FrameRate,'%03d') '/seq16-hg-single-no-skip-clstm/'];
 
-% 2. 
-FrameRate = 4;
-frame_root = './exp/penn-crop/seq16-hg-single-no-skip-res-clstm/preds_val_vis/';
-vis_root = ['./outputs/preds_val_fr' num2str(FrameRate,'%03d') '/seq16-hg-single-no-skip-res-clstm/'];
+% % 2.
+% FrameRate = 4;
+% frame_root = './exp/penn-crop/seq16-hg-single-no-skip-res-clstm/preds_val_vis/';
+% vis_root = ['./outputs/preds_val_fr' num2str(FrameRate,'%03d') '/seq16-hg-single-no-skip-res-clstm/'];
+
+% % 3.
+% FrameRate = 4;
+% frame_root = './exp/penn-crop/seq16-hg-256-clstm/preds_val_vis/';
+% vis_root = ['./outputs/preds_val_fr' num2str(FrameRate,'%03d') '/seq16-hg-256-clstm/'];
+
+% % 4.
+% FrameRate = 4;
+% frame_root = './exp/penn-crop/seq16-hg-256-res-clstm/preds_val_vis/';
+% vis_root = ['./outputs/preds_val_fr' num2str(FrameRate,'%03d') '/seq16-hg-256-res-clstm/'];
+
+% % 5.
+% FrameRate = 4;
+% frame_root = './exp/penn-crop/seq16-hg-pf-clstm/preds_val_vis/';
+% vis_root = ['./outputs/preds_val_fr' num2str(FrameRate,'%03d') '/seq16-hg-pf-clstm/'];
+
+% % 6.
+% FrameRate = 4;
+% frame_root = './exp/penn-crop/seq16-hg-pf-res-clstm/preds_val_vis/';
+% vis_root = ['./outputs/preds_val_fr' num2str(FrameRate,'%03d') '/seq16-hg-pf-res-clstm/'];
+
+% % 7.
+% FrameRate = 4;
+% frame_root = './exp/penn-crop/seq16-hg-pf-res-clstm-resf/preds_val_vis/';
+% vis_root = ['./outputs/preds_val_fr' num2str(FrameRate,'%03d') '/seq16-hg-pf-res-clstm-resf/'];
+
 
 makedir(vis_root);
 
