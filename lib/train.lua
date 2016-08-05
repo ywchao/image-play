@@ -16,6 +16,11 @@ function Trainer:__init(model, criterion, opt, optimState)
   }
   self.opt = opt
   self.params, self.gradParams = model:getParameters()
+  if #model:findModules('nn.SplitTable') == 2 then
+    self.predIm = true
+  else
+    self.predIm = false
+  end
   self.logger = {
     train = Logger(paths.concat(opt.save, 'train.log'), opt.resume),
     val = Logger(paths.concat(opt.save, 'val.log'), opt.resume)
@@ -31,10 +36,15 @@ function Trainer:initLogger(logger)
   names[3] = 'time'
   names[4] = 'datTime'
   for i = 1, self.opt.seqLength do
-    names[#names+1] = 'loss' .. i
+    names[#names+1] = 'loss' .. i .. 'p'
   end
   for i = 1, self.opt.seqLength do
-    names[#names+1] = 'acc' .. i
+    names[#names+1] = 'acc' .. i .. 'p'
+  end
+  if self.predIm then
+    for i = 1, self.opt.seqLength do
+      names[#names+1] = 'loss' .. i .. 'i'
+    end
   end
   logger:setNames(names)
 end
@@ -71,41 +81,55 @@ function Trainer:train(epoch, loaders)
   
     -- Get input and target
     local input = sample.input[1]
-    local target = sample.target
+    local target_ps = sample.target_ps
+    local target_im = sample.target_im
 
     -- Convert to CUDA
-    input, target = self:convertCuda(input, target)
+    input, target_ps, target_im = self:convertCuda(input, target_ps, target_im)
   
     -- Forward pass
     local output = self.model:forward(input)
-    local loss_sum = self.criterion:forward(self.model.output, target)
-    local loss = {}
-    for j = 1, #output do
-      if j <= self.seqlen then
-        loss[j] = self.criterion.criterions[j].output
-      else
-        loss[j] = 0
+    local loss_ps, loss_im = {}, {}
+    local acc_ps = {}
+    if self.predIm then
+      self.criterion:forward(self.model.output, {target_ps, target_im})
+      for j = 1, #output[1] do
+        if j <= self.seqlen then
+          loss_ps[j] = self.criterion.criterions[1].criterions[j].output
+          loss_im[j] = self.criterion.criterions[2].criterions[j].output
+          acc_ps[j] = self:computeAccuracy(output[1][j]:contiguous(), target_ps[j])
+        else
+          loss_ps[j] = 0
+          loss_im[j] = 0
+          acc_ps[j] = 0/0
+        end
+      end
+    else
+      self.criterion:forward(self.model.output, target_ps)
+      for j = 1, #output do
+        if j <= self.seqlen then
+          loss_ps[j] = self.criterion.criterions[j].output
+          acc_ps[j] = self:computeAccuracy(output[j]:contiguous(), target_ps[j])
+        else
+          loss_ps[j] = 0
+          acc_ps[j] = 0/0
+        end
+        loss_im[j] = 0/0
       end
     end
+    acc_ps = torch.Tensor(acc_ps)
 
     -- Backprop
     self.model:zeroGradParameters()
-    self.criterion:backward(self.model.output, target)
+    if self.predIm then
+      self.criterion:backward(self.model.output, {target_ps, target_im})
+    else
+      self.criterion:backward(self.model.output, target_ps)
+    end
     self.model:backward(input, self.criterion.gradInput)
   
     -- Optimization
     optim.rmsprop(feval, self.params, self.optimState)
-
-    -- Compute accuracy
-    local acc = {}
-    for j = 1, #output do
-      if j <= self.seqlen then
-        acc[j] = self:computeAccuracy(output[j]:contiguous(), target[j])
-      else
-        acc[j] = 0/0
-      end
-    end
-    acc = torch.Tensor(acc)
 
     -- Print and log
     local time = timer:time().real
@@ -115,10 +139,15 @@ function Trainer:train(epoch, loaders)
     entry[3] = string.format("%.3f" % time)
     entry[4] = string.format("%.3f" % dataTime)
     for j = 1, self.opt.seqLength do
-      entry[#entry+1] = string.format("%.5f" % loss[j])
+      entry[#entry+1] = string.format("%.5f" % loss_ps[j])
     end
     for j = 1, self.opt.seqLength do
-      entry[#entry+1] = string.format("%.5f" % acc[j])
+      entry[#entry+1] = string.format("%.5f" % acc_ps[j])
+    end
+    if self.predIm then
+      for j = 1, self.opt.seqLength do
+        entry[#entry+1] = string.format("%.5f" % loss_im[j])
+      end
     end
     self.logger['train']:add(entry)
   
@@ -154,10 +183,11 @@ function Trainer:test(epoch, iter, loaders, split)
   )
   local dataloader = loaders[split]
   local size = dataloader:size()
-  local lossSum, accSum = {}, {}
+  local lossSum_ps, lossSum_im, accSum_ps = {}, {}, {}
   for i = 1, self.opt.seqLength do
-    lossSum[i] = 0.0
-    accSum[i] = 0.0
+    lossSum_ps[i] = 0.0
+    lossSum_im[i] = 0.0
+    accSum_ps[i] = 0.0
   end
   local N = 0
 
@@ -168,38 +198,51 @@ function Trainer:test(epoch, iter, loaders, split)
   for i, sample in dataloader:run() do
     -- Get input and target
     local input = sample.input[1]
-    local target = sample.target
+    local target_ps = sample.target_ps
+    local target_im = sample.target_im
 
     -- Convert to CUDA
-    input, target = self:convertCuda(input, target)
+    input, target_ps, target_im = self:convertCuda(input, target_ps, target_im)
 
     -- Forward pass
     local output = self.model:forward(input)
-    local loss_sum = self.criterion:forward(self.model.output, target)
-    local loss = {}
-    for j = 1, #output do
-      if j <= self.seqlen then
-        loss[j] = self.criterion.criterions[j].output
-      else
-        loss[j] = 0
+    local loss_ps, loss_im = {}, {}
+    local acc_ps = {}
+    if self.predIm then
+      self.criterion:forward(self.model.output, {target_ps, target_im})
+      for j = 1, #output[1] do
+        if j <= self.seqlen then
+          loss_ps[j] = self.criterion.criterions[1].criterions[j].output
+          loss_im[j] = self.criterion.criterions[2].criterions[j].output
+          acc_ps[j] = self:computeAccuracy(output[1][j]:contiguous(), target_ps[j])
+        else
+          loss_ps[j] = 0
+          loss_im[j] = 0
+          acc_ps[j] = 0/0
+        end
+      end
+    else
+      self.criterion:forward(self.model.output, target_ps)
+      for j = 1, #output do
+        if j <= self.seqlen then
+          loss_ps[j] = self.criterion.criterions[j].output
+          acc_ps[j] = self:computeAccuracy(output[j]:contiguous(), target_ps[j])
+        else
+          loss_ps[j] = 0
+          acc_ps[j] = 0/0
+        end
+        loss_im[j] = 0/0
       end
     end
+    acc_ps = torch.Tensor(acc_ps)
 
-    -- Compute accuracy
-    local acc = {}
-    for j = 1, #output do
-      if j <= self.seqlen then
-        acc[j] = self:computeAccuracy(output[j], target[j])
-      else
-        acc[j] = 0/0
-      end
-    end
-    acc = torch.Tensor(acc)
-    if torch.all(acc:sub(1,self.seqlen):eq(acc:sub(1,self.seqlen))) then
+    -- Accumulate loss and acc
+    if torch.all(acc_ps:sub(1,self.seqlen):eq(acc_ps:sub(1,self.seqlen))) then
       local batchSize = input:size(1)
       for j = 1, self.opt.seqLength do
-        lossSum[j] = lossSum[j] + loss[j]
-        accSum[j] = accSum[j] + acc[j]
+        lossSum_ps[j] = lossSum_ps[j] + loss_ps[j]
+        lossSum_im[j] = lossSum_im[j] + loss_im[j]
+        accSum_ps[j] = accSum_ps[j] + acc_ps[j]
       end
       N = N + batchSize
     end 
@@ -210,8 +253,9 @@ function Trainer:test(epoch, iter, loaders, split)
 
   -- Compute mean loss and accuracy
   for i = 1, self.opt.seqLength do
-    lossSum[i] = lossSum[i] / N
-    accSum[i] = accSum[i] / N
+    lossSum_ps[i] = lossSum_ps[i] / N
+    lossSum_im[i] = lossSum_im[i] / N
+    accSum_ps[i] = accSum_ps[i] / N
   end
 
   -- Print and log
@@ -222,10 +266,15 @@ function Trainer:test(epoch, iter, loaders, split)
   entry[3] = string.format("%.3f" % testTime)
   entry[4] = string.format("%d" % 0/0)
   for j = 1, self.opt.seqLength do
-    entry[#entry+1] = string.format("%.5f" % lossSum[j])
+    entry[#entry+1] = string.format("%.5f" % lossSum_ps[j])
   end
   for j = 1, self.opt.seqLength do
-    entry[#entry+1] = string.format("%.5f" % accSum[j])
+    entry[#entry+1] = string.format("%.5f" % accSum_ps[j])
+  end
+  if self.predIm then
+    for j = 1, self.opt.seqLength do
+      entry[#entry+1] = string.format("%.5f" % lossSum_im[j])
+    end
   end
   self.logger[split]:add(entry)
 end
@@ -233,7 +282,7 @@ end
 function Trainer:predict(loaders, split)
   local dataloader = loaders[split]
   local sidx = torch.LongTensor(dataloader:sizeSampled())
-  local heatmaps
+  local heatmaps, trans
 
   print("=> Generating predictions ...")
   xlua.progress(0, dataloader:sizeSampled())
@@ -243,26 +292,39 @@ function Trainer:predict(loaders, split)
     -- Get input and target
     local index = sample.index
     local input = sample.input[1]
-    local target = sample.target
+    local target_ps = sample.target_ps
+    local target_im = sample.target_im
 
     -- Convert to CUDA
-    input, target = self:convertCuda(input, target)
+    input, target_ps, target_im = self:convertCuda(input, target_ps, target_im)
 
     -- Forward pass
     local output = self.model:forward(input)
 
     -- Copy output
     if not heatmaps then
-      local outputDim = target[1]:size(2)
       heatmaps = torch.FloatTensor(
           dataloader:sizeSampled(), self.opt.seqLength,
-          outputDim, self.opt.outputRes, self.opt.outputRes
+          target_ps[1]:size(2), self.opt.outputRes, self.opt.outputRes
       )
+      if self.predIm then
+        trans = torch.FloatTensor(
+          dataloader:sizeSampled(), self.opt.seqLength,
+          target_im[1]:size(2), self.opt.outputRes, self.opt.outputRes
+        )
+      end
     end
     assert(input:size(1) == 1, 'batch size must be 1 with run({pred=true})')
     sidx[i] = index[1]
-    for j = 1, #output do
-      heatmaps[i][j]:copy(output[j][1])
+    if self.predIm then
+      for j = 1, #output[1] do
+        heatmaps[i][j]:copy(output[1][j][1])
+        trans[i][j]:copy(output[2][j][1])
+      end
+    else
+      for j = 1, #output do
+        heatmaps[i][j]:copy(output[j][1])
+      end
     end
 
     xlua.progress(i, dataloader:sizeSampled())
@@ -272,10 +334,16 @@ function Trainer:predict(loaders, split)
   -- Sort heatmaps by index
   local sidx, i = torch.sort(sidx)
   heatmaps = heatmaps:index(1, i)
+  if self.predIm then
+    trans = trans:index(1, i)
+  end
 
   -- Save final predictions
   local f = hdf5.open(self.opt.save .. '/preds_' .. split .. '.h5', 'w')
   f:write('heatmaps', heatmaps)
+  if self.predIm then
+    f:write('trans', trans)
+  end
   f:close()
 end
 
@@ -285,22 +353,35 @@ function Trainer:setCriterionWeight(epoch)
   -- seqlen = math.ceil(epoch / self.opt.currInt) + 1
   seqlen = 2 ^ math.ceil(epoch / self.opt.currInt)
   seqlen = math.min(seqlen, self.opt.seqLength)
-  for i = 1, #self.criterion.weights do
-    if i <= seqlen then
-      self.criterion.weights[i] = 1
-    else
-      self.criterion.weights[i] = 0
+  if self.predIm then
+    for i = 1, #self.criterion.criterions[1].weights do
+      if i <= seqlen then
+        self.criterion.criterions[1].weights[i] = 1
+        self.criterion.criterions[2].weights[i] = 1
+      else
+        self.criterion.criterions[1].weights[i] = 0
+        self.criterion.criterions[2].weights[i] = 0
+      end
+    end
+  else
+    for i = 1, #self.criterion.weights do
+      if i <= seqlen then
+        self.criterion.weights[i] = 1
+      else
+        self.criterion.weights[i] = 0
+      end
     end
   end
   self.seqlen = seqlen
 end
 
-function Trainer:convertCuda(input, target)
+function Trainer:convertCuda(input, target_ps, target_im)
   input = input:cuda()
-  for i = 1, #target do
-    target[i] = target[i]:cuda()
+  for i = 1, #target_ps do
+    target_ps[i] = target_ps[i]:cuda()
+    target_im[i] = target_im[i]:cuda()
   end
-  return input, target
+  return input, target_ps, target_im
 end
 
 function Trainer:computeAccuracy(output, target)

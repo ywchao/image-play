@@ -63,11 +63,12 @@ local function drawSkeleton(input, hms, coords, dataset)
   return im, hms, coords
 end
 
+-- Draw predicted pose
 local function drawOutput(input, hms, coords, dataset)
   local im, hms, coords = drawSkeleton(input, hms, coords, dataset)
 
   local colorHms = {}
-  local inp64 = image.scale(input,64):mul(.3)
+  local inp64 = image.scale(input:double(),64):mul(.3)
   for i = 1, hms:size(1) do
       colorHms[i] = colorHM(hms[i])
       colorHms[i]:mul(.7):add(inp64)
@@ -75,6 +76,23 @@ local function drawOutput(input, hms, coords, dataset)
   local totalHm = compileImages(colorHms, 4, 4, 64)
   im = compileImages({im,totalHm}, 1, 2, 256)
   im = image.scale(im,756)
+  return im
+end
+
+-- Draw predicted pose and transformed image
+local function drawOutputTF(input, hms, coords, tf, dataset)
+  local tf_ = image.scale(tf,256)
+  local im, hms, coords = drawSkeleton(tf_, hms, coords, dataset)
+
+  local colorHms = {}
+  local tf = tf:double():mul(0.3)
+  for i = 1, hms:size(1) do
+    colorHms[i] = colorHM(hms[i])
+    colorHms[i]:mul(.7):add(tf)
+  end
+  local totalHm = compileImages(colorHms, 4, 4, 64)
+  im = compileImages({input,im,totalHm}, 1, 3, 256)
+  im = image.scale(im,1134)
   return im
 end
 
@@ -90,10 +108,16 @@ function M.run(loaders, split, opt, seqlen)
   local vis_root = paths.concat(opt.save, 'preds_' .. split .. '_vis')
 
   -- Load final predictions
-  f = hdf5.open(opt.save .. '/preds_' .. split .. '.h5', 'r')
-  heatmaps = f:read('heatmaps'):all()
+  local f = hdf5.open(opt.save .. '/preds_' .. split .. '.h5', 'r')
+  local heatmaps = f:read('heatmaps'):all()
   assert(heatmaps:size(1) == loaders[split]:sizeSampled())
   assert(heatmaps:size(2) == opt.seqLength)
+  local trans
+  if f._rootGroup._children['trans'] ~= nil then
+    trans = f:read('trans'):all()
+    assert(trans:size(1) == loaders[split]:sizeSampled())
+    assert(trans:size(2) == opt.seqLength)
+  end
 
   print("=> Visualizing predictions ...")
   xlua.progress(0, dataloader:sizeSampled())
@@ -121,11 +145,15 @@ function M.run(loaders, split, opt, seqlen)
       -- Use first frame as background
       local inp = input[1][1]
 
-      -- Get heatmap
+      -- Get heatmap and transformed image
       local idx = find(sidx, index[1])
       assert(idx:numel() == 1, 'index not found')
       local hm = heatmaps[idx[1]][j]:clone()
       hm[hm:lt(0)] = 0
+      local tf
+      if trans ~= nil then
+        tf = trans[idx[1]][j]:clone()
+      end
 
       -- Get predictions
       local preds = getPreds(hm:view(1, hm:size(1), hm:size(2), hm:size(3)))
@@ -133,7 +161,12 @@ function M.run(loaders, split, opt, seqlen)
 
       -- Display and save the result
       preds:mul(4)
-      local dispImg = drawOutput(inp:double(), hm, preds, opt.dataset)
+      local dispImg
+      if tf == nil then
+        dispImg = drawOutput(inp, hm, preds, opt.dataset)
+      else
+        dispImg = drawOutputTF(inp, hm, preds, tf, opt.dataset)
+      end
 
       -- Save output
       image.save(vis_file, dispImg)

@@ -40,9 +40,26 @@ function M.setup(opt, checkpoint)
   end
 
   -- Create criterion
-  local criterion = nn.ParallelCriterion()
-  for i = 1, opt.seqLength do
-    criterion:add(nn.MSECriterion())
+  -- Detect image prediction by checking the number of nn.SplitTable
+  local criterion
+  if #model:findModules('nn.SplitTable') == 1 then
+    -- Pose prediction only
+    criterion = nn.ParallelCriterion()
+    for i = 1, opt.seqLength do
+      criterion:add(nn.MSECriterion())
+    end
+  end
+  if #model:findModules('nn.SplitTable') == 2 then
+    -- Pose and image prediction
+    criterion = nn.ParallelCriterion()
+    criterion:add(nn.ParallelCriterion())
+    criterion:add(nn.ParallelCriterion())
+    for i = 1, opt.seqLength do
+      criterion.criterions[1]:add(nn.MSECriterion())
+    end
+    for i = 1, opt.seqLength do
+      criterion.criterions[2]:add(nn.MSECriterion())
+    end
   end
 
   -- Convert to CUDA

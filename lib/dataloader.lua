@@ -113,7 +113,8 @@ function DataLoader:run(kwargs)
                local sz = indices:size(1)
                local index = {}
                local input, imageSize
-               local target, targetSizes
+               local target_ps, targetSizes
+               local target_im
                for i, idx in ipairs(indices:totable()) do
                   index[i] = idx
                   local sample = _G.dataset:get(idx)
@@ -130,26 +131,30 @@ function DataLoader:run(kwargs)
                        input[j] = torch.FloatTensor(sz, unpack(imageSize))
                      end
                   end
-                  if not target then
+                  if not target_ps then
                      targetSize = sample.target[1]:size():totable()
-                     target = {}
+                     target_ps = {}
+                     target_im = {}
                      for j = 1, #sample.target do
-                       target[j] = torch.FloatTensor(sz, unpack(targetSize))
+                       target_ps[j] = torch.FloatTensor(sz, unpack(targetSize))
+                       target_im[j] = torch.FloatTensor(sz, 3, targetSize[2], targetSize[3])
                      end
                   end
                   -- input[i]:copy(sample.input)
                   for j = 1, #input do
                     input[j][i] = sample.input[j]
                   end
-                  for j = 1, #target do
-                    target[j][i] = sample.target[j]
+                  for j = 1, #target_ps do
+                    target_ps[j][i] = sample.target[j]
+                    target_im[j][i] = image.scale(sample.input[j],targetSize[3],targetSize[2])
                   end
                end
                collectgarbage()
                return {
                   index = index,
                   input = input,
-                  target = target,
+                  target_ps = target_ps,
+                  target_im = target_im,
                }
             end,
             function(_sample_)
