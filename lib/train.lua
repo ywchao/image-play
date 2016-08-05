@@ -320,10 +320,12 @@ function Trainer:predict(loaders, split)
       for j = 1, #output[1] do
         heatmaps[i][j]:copy(output[1][j][1])
         trans[i][j]:copy(output[2][j][1])
+        -- heatmaps[i][j]:copy(target_ps[2][j][1])
       end
     else
       for j = 1, #output do
         heatmaps[i][j]:copy(output[j][1])
+        -- heatmaps[i][j]:copy(target_ps[j][1])
       end
     end
 
@@ -340,6 +342,7 @@ function Trainer:predict(loaders, split)
 
   -- Save final predictions
   local f = hdf5.open(self.opt.save .. '/preds_' .. split .. '.h5', 'w')
+  -- local f = hdf5.open(self.opt.save .. '/gt_' .. split .. '.h5', 'w')
   f:write('heatmaps', heatmaps)
   if self.predIm then
     f:write('trans', trans)

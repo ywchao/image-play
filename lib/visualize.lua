@@ -30,7 +30,7 @@ local function drawSkeleton(input, hms, coords, dataset)
     -- hms[15] = (image.translate(hms[8],d158[1],d158[2]) +
     --            image.translate(hms[9],d159[1],d159[2])) / 2
     hms[14]:fill(math.min(hms[2]:mean(),hms[3]:mean()))
-    hms[15]:fill(math.min(hms[8]:mean(),hms[8]:mean()))
+    hms[15]:fill(math.min(hms[8]:mean(),hms[9]:mean()))
 
     pairRef = {
         {14,1},{2,14},{3,14},{4,2},{5,3},{6,4},{7,5},
@@ -106,9 +106,11 @@ function M.run(loaders, split, opt, seqlen)
 
   local dataloader = loaders[split]
   local vis_root = paths.concat(opt.save, 'preds_' .. split .. '_vis')
+  -- local vis_root = paths.concat(opt.save, 'gt_' .. split .. '_vis')
 
   -- Load final predictions
   local f = hdf5.open(opt.save .. '/preds_' .. split .. '.h5', 'r')
+  -- local f = hdf5.open(opt.save .. '/gt_' .. split .. '.h5', 'r')
   local heatmaps = f:read('heatmaps'):all()
   assert(heatmaps:size(1) == loaders[split]:sizeSampled())
   assert(heatmaps:size(2) == opt.seqLength)
@@ -144,6 +146,7 @@ function M.run(loaders, split, opt, seqlen)
 
       -- Use first frame as background
       local inp = input[1][1]
+      -- local inp = input[j][1]
 
       -- Get heatmap and transformed image
       local idx = find(sidx, index[1])
