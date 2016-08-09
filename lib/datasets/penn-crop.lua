@@ -142,8 +142,14 @@ end
 -- Get sampled indices; for prediction and visualization
 function PennCropDataset:getSampledIdx()
   local sidx
+  local scnt = 0
   for i = 1, self.ind2sub:size(1) do
     if self.ind2sub[i][2] == 1 then
+      scnt = scnt + 1
+      -- Subsample videos (1/10) for training set only
+      if self.split == 'train' and scnt % 10 ~= 1 then
+        goto continue
+      end
       local phaseSeq = self:_getPhaseSeq(i)
       if not sidx then
         sidx = phaseSeq
@@ -151,6 +157,7 @@ function PennCropDataset:getSampledIdx()
         sidx = torch.cat(sidx, phaseSeq, 1)
       end
     end
+    ::continue::
   end
   return sidx
 end

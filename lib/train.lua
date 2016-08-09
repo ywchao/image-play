@@ -282,7 +282,20 @@ end
 function Trainer:predict(loaders, split)
   local dataloader = loaders[split]
   local sidx = torch.LongTensor(dataloader:sizeSampled())
-  local heatmaps, trans
+  local heatmaps, trans, flows
+
+  -- Find flow prediction module
+  local fpm
+  if self.predIm then
+    fpm = {}
+    for i, m in pairs(self.model:findModules('cudnn.SpatialConvolution')) do
+      if m.nOutputPlane == 2 then
+        table.insert(fpm, m)
+      end
+    end
+    assert(#fpm == 1, 'error in finding the flow prediction module')
+    fpm = fpm[1]
+  end
 
   print("=> Generating predictions ...")
   xlua.progress(0, dataloader:sizeSampled())
@@ -312,6 +325,14 @@ function Trainer:predict(loaders, split)
           dataloader:sizeSampled(), self.opt.seqLength,
           target_im[1]:size(2), self.opt.outputRes, self.opt.outputRes
         )
+        flows = torch.FloatTensor(
+          dataloader:sizeSampled(), self.opt.seqLength,
+          2, self.opt.outputRes, self.opt.outputRes
+        )
+        targets = torch.FloatTensor(
+          dataloader:sizeSampled(), self.opt.seqLength,
+          3, self.opt.outputRes, self.opt.outputRes
+        )
       end
     end
     assert(input:size(1) == 1, 'batch size must be 1 with run({pred=true})')
@@ -319,9 +340,13 @@ function Trainer:predict(loaders, split)
     if self.predIm then
       for j = 1, #output[1] do
         heatmaps[i][j]:copy(output[1][j][1])
-        trans[i][j]:copy(output[2][j][1])
         -- heatmaps[i][j]:copy(target_ps[2][j][1])
+        trans[i][j]:copy(output[2][j][1])
+        -- Get gt image
+        targets[i][j]:copy(target_im[j][1])
       end
+      -- Get flow
+      flows[i]:copy(fpm.output)
     else
       for j = 1, #output do
         heatmaps[i][j]:copy(output[j][1])
@@ -338,6 +363,8 @@ function Trainer:predict(loaders, split)
   heatmaps = heatmaps:index(1, i)
   if self.predIm then
     trans = trans:index(1, i)
+    flows = flows:index(1, i)
+    targets = targets:index(1, i)
   end
 
   -- Save final predictions
@@ -348,6 +375,14 @@ function Trainer:predict(loaders, split)
     f:write('trans', trans)
   end
   f:close()
+
+  -- Save flow separately
+  if self.predIm then
+    local f = hdf5.open(self.opt.save .. '/flows_' .. split .. '.h5', 'w')
+    f:write('flows', flows)
+    f:write('targets', targets)
+    f:close()
+  end
 end
 
 function Trainer:setCriterionWeight(epoch)
