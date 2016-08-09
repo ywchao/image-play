@@ -17,9 +17,26 @@ num_seq = numel(list_seq);
 res_root = './flownet-release/models/flownet/res_penn-crop_samp/';
 vis_root = './flownet-release/models/flownet/vis_penn-crop_samp/';
 
+% first K videos for each action
+K = 3;
+action = cell(num_seq,1);
+for i = 1:num_seq
+    lb_file = [label_root list_seq{i}];
+    anno = load(lb_file);
+    assert(ischar(anno.action));
+    action{i} = anno.action;
+end
+[list_act,~,ia] = unique(action, 'stable');
+seq = zeros(1,numel(list_act)*K);
+for i = 1:numel(list_act)
+    ii = find(ia == i);
+    seq((i-1)*K+1:i*K) = ii(1:K);
+end
+
 figure(1);
 
-for i = 1:num_seq
+% for i = 1:num_seq
+for i = seq
     tic_print(sprintf('  %04d/%04d\n',i,num_seq));
     % read frames in sequence
     [~,name_seq] = fileparts(list_seq{i});

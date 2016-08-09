@@ -3,7 +3,7 @@ layer {
   type: "ImageData"
   top: "img0"
   image_data_param {
-    source: "tmp/img1.txt"
+    source: "$IMG1_FILE"
     batch_size: 1
   }
 }
@@ -12,7 +12,7 @@ layer {
   type: "ImageData"
   top: "img1"
   image_data_param {
-    source: "tmp/img2.txt"
+    source: "$IMG2_FILE"
     batch_size: 1
   }
 }

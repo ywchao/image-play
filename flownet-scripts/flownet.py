@@ -81,7 +81,7 @@ class FlowNet:
         subprocess.call(args)
 
     @staticmethod
-    def run(basepath, img_files, model_folder, output_dir):
+    def run(basepath, img_files, model_folder, output_dir, batch_id):
         os.chdir(basepath)
 
         if not (os.path.isfile(FlowNet.caffe_bin) and os.path.isfile(FlowNet.img_size_bin)):
@@ -123,14 +123,14 @@ class FlowNet:
         subprocess.call('mkdir -p tmp', shell=True)
 
         if not using_lists:
-            with open('tmp/img1.txt', "w") as tfile:
+            with open('tmp/{:02}_img1.txt'.format(batch_id), "w") as tfile:
                 tfile.write("%s\n" % img_files[0])
 
-            with open('tmp/img2.txt', "w") as tfile:
+            with open('tmp/{:02}_img2.txt'.format(batch_id), "w") as tfile:
                 tfile.write("%s\n" % img_files[1])
         else:
-            subprocess.call(['cp', img_files[0], 'tmp/img1.txt'])
-            subprocess.call(['cp', img_files[1], 'tmp/img2.txt'])
+            subprocess.call(['cp', img_files[0], 'tmp/{:02}_img1.txt'.format(batch_id)])
+            subprocess.call(['cp', img_files[1], 'tmp/{:02}_img2.txt'.format(batch_id)])
 
         divisor = 64.
         adapted_width = ceil(width/divisor) * divisor
@@ -145,7 +145,9 @@ class FlowNet:
             '$TARGET_HEIGHT': ('%d' % height),
             '$SCALE_WIDTH': ('%.8f' % rescale_coeff_x),
             '$SCALE_HEIGHT': ('%.8f' % rescale_coeff_y),
-            '$OUTPUT_DIR': output_dir
+            '$OUTPUT_DIR': output_dir,
+            '$IMG1_FILE': 'tmp/{:02}_img1.txt'.format(batch_id),
+            '$IMG2_FILE': 'tmp/{:02}_img2.txt'.format(batch_id)
         }
 
         proto = ''
@@ -155,12 +157,12 @@ class FlowNet:
         for r in replacement_list:
             proto = proto.replace(r, replacement_list[r])
 
-        with open('tmp/deploy.prototxt', "w") as tfile:
+        with open('tmp/{:02}_deploy.prototxt'.format(batch_id), "w") as tfile:
             tfile.write(proto)
 
         # Run caffe
 
-        args = [FlowNet.caffe_bin, 'test', '-model', 'tmp/deploy.prototxt',
+        args = [FlowNet.caffe_bin, 'test', '-model', 'tmp/{:02}_deploy.prototxt'.format(batch_id),
                 '-weights', model_folder + '/flownet_smalldisp.caffemodel',
                 '-iterations', str(list_length),
                 '-gpu', '0']

@@ -4,8 +4,8 @@ config;
 % set parameters
 
 % sample == true is used for visualization only
-% samp = true; num_batch = 1;
-% samp = false; num_batch = 20;
+% samp = true; num_batch = 1; split = 'all';
+% samp = false; num_batch = 12; split = 'train';
 
 n_phase = 16;
 
@@ -14,13 +14,25 @@ list_seq = dir([label_root '*.mat']);
 list_seq = {list_seq.name}';
 num_seq = numel(list_seq);
 
+% process train/val/test separately
+if samp == false
+    annot_file = ['./data/Penn_Action_cropped/' split '.h5'];
+    ind2sub = permute(hdf5read(annot_file,'ind2sub'),[2 1]);
+    list_seq = unique(ind2sub(:,1));
+    list_seq = num2cell(list_seq);
+    list_seq = cellfun(@(x)[num2str(x,'%04d') '.mat'],list_seq,'UniformOutput',false);
+    num_seq = numel(list_seq);
+else
+    assert(strcmp(split,'all') == 1);
+end
+
 postfix = '';
 if samp
     postfix = '_samp';
 end
 
 input_root  = ['./data/Penn_Action_cropped/flownet' postfix '/flownet_input/'];
-script_temp = ['./data/Penn_Action_cropped/flownet' postfix '/flownet_run_%02d.sh'];
+script_temp = ['./data/Penn_Action_cropped/flownet' postfix '/flownet_run_' split '_%02d.sh'];
 output_root = ['./res_penn-crop' postfix '/'];
 makedir(input_root);
 
@@ -88,7 +100,9 @@ eid = [ss(2:num_batch)-1 len];
 for i = 1:num_batch
     script_file = sprintf(script_temp,i);
     if ~exist(script_file,'file')
-        Cb = [{'#!/bin/bash'}; C(sid(i):eid(i))];
+        Cb = C;
+        Cb = cellfun(@(x)[x ' ' num2str(i)],Cb,'UniformOutput',false);
+        Cb = [{'#!/bin/bash'}; Cb(sid(i):eid(i))];
         write_file_lines(script_file,Cb);
         edit_file_permission(script_file,'755');
     end
