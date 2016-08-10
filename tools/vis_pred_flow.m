@@ -62,6 +62,8 @@ for i = 1:numel(sidx)
         [X, Y] = meshgrid(1:size(fl,2), 1:size(fl,1));
         fl(:,:,1) = fl(:,:,1)-Y;
         fl(:,:,2) = fl(:,:,2)-X;
+        mfactor = 0.1;
+        maxFlow = max(size(fl,1),size(fl,2)) * mfactor;
         % get backward flow (downsampled)
         rfactor = 0.1 * upfactor;
         vec = flows(:, :, :, j ,i);
@@ -79,8 +81,8 @@ for i = 1:numel(sidx)
         im_c = uint8(double(ip)*alpha+double(gt)*(1-alpha));
         % plot
         subplot('Position',[0 0 1/3 1]); imshow(im_c);
-        subplot('Position',[1/3 0 1/3 1]); imshow(flowToColor(fl));
-        subplot('Position',[2/3 0 1/3 1]); quiver(X,Y,vec(:,:,1),vec(:,:,2));  
+        subplot('Position',[1/3 0 1/3 1]); imshow(flowToColor(fl,maxFlow));
+        subplot('Position',[2/3 0 1/3 1]); quiver(X,Y,vec(:,:,1),vec(:,:,2),0);
         set(gca,'YDir','Reverse');
         axis image; axis off;
         % get figure properties

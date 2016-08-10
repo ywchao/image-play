@@ -77,17 +77,20 @@ for i = seq
             im_2 = imread(im_file_2);
             im_f = readFlowFile(im_file_f);
             
+            subplot('Position',[0 0 1/3 1]);
             alpha = 1/2;
             im_c = uint8(double(im_1)*alpha+double(im_2)*(1-alpha));
-           
-            subplot('Position',[0 0 1/3 1]); imshow(im_c);
-            subplot('Position',[1/3 0 1/3 1]); imshow(flowToColor(im_f));
-            % subplot('Position',[2/3 0 1/3 1]); plotflow(im_v); axis off;
+            imshow(im_c);
+            subplot('Position',[1/3 0 1/3 1]);
+            mfactor = 0.1;
+            maxFlow = max(size(im_f,1),size(im_f,2)) * mfactor;
+            imshow(flowToColor(im_f,maxFlow));
             subplot('Position',[2/3 0 1/3 1]);
             rfactor = 0.1;
             im_v = imresize(im_f, rfactor);
+            im_v = im_v * rfactor;
             [X, Y] = meshgrid(1:size(im_v,2), 1:size(im_v,1));
-            quiver(X,Y,im_v(:,:,1),im_v(:,:,2));
+            quiver(X,Y,im_v(:,:,1),im_v(:,:,2),0);
             set(gca,'YDir','Reverse');
             
             axis image; axis off;
