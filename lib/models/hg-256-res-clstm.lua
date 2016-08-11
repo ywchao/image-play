@@ -5,7 +5,7 @@ M = {}
 -- Input variables
 local seqLength
 local hiddenSize
-local numLayersz
+local numLayers
 
 local function clstm(inp, inputSize, res)
   -- Replicate encoder output
