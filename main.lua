@@ -43,7 +43,9 @@ for epoch = startEpoch, opt.nEpochs do
 end
 
 -- Predict with the final model
+trainer:predict(loaders, 'train')
 trainer:predict(loaders, 'val')
 
 -- Visualize prediction
+visualize.run(loaders, 'train', opt)
 visualize.run(loaders, 'val', opt)

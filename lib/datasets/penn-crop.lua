@@ -2,6 +2,7 @@ require 'hdf5'
 require 'image'
 require 'common/util'
 require 'lib/util/img'
+require 'lib/util/flo'
 
 local M = {}
 local PennCropDataset = torch.class('image-play.PennCropDataset', M)
@@ -85,6 +86,17 @@ function PennCropDataset:_getCenterScale(img)
   return {torch.Tensor({x,y}), scale}
 end
 
+-- Get flow path
+function PennCropDataset:_flowpath(idx, i)
+  return string.format('%04d/%03d/flownets-pred-%07d.flo',self.ind2sub[idx][1],self.ind2sub[idx][2],i-1)
+end
+
+-- Load flow
+function PennCropDataset:_loadFlow(idx, i)
+  assert(self.nPhase == 16)
+  return readFlowFile(paths.concat('flownet-release/models/flownet/res_penn-crop/',self:_flowpath(idx,i)))
+end
+
 -- Get dataset size
 function PennCropDataset:size()
   return self.ind2sub:size(1)
@@ -94,8 +106,9 @@ function PennCropDataset:get(idx)
   local input = {}
   -- local input
   local target = {}
-  local img, center, scale
-  local inp, out
+  local flow = {}
+  local img, center, scale, fl
+  local inp, out, out_fl
 
   local phaseSeq = self:_getPhaseSeq(idx)
   for i = 1, phaseSeq:numel() do
@@ -117,16 +130,30 @@ function PennCropDataset:get(idx)
         drawGaussian(out[j], transform(torch.add(pts[j],1), center, scale, 0, self.outputRes), 2)
       end
     end
+    -- Load and transform flow
+    if i == self.nPhase or pidx == phaseSeq[i+1] then
+      out_fl = torch.zeros(2, self.outputRes, self.outputRes)
+      -- out_fl = torch.randn(2, self.outputRes, self.outputRes):mul(0.25)
+    else
+      fl = self:_loadFlow(idx, i)
+      fl = fl:permute(3,1,2)
+      out_fl = crop(fl, center, scale, 0, self.outputRes)
+      -- Need to adjust vector magnitude according to the resizing factor
+      local rfactor = self.outputRes / (200 * scale)
+      out_fl = out_fl:mul(rfactor)
+    end
     input[i] = inp
     -- We only need the first frame for input
     -- if i == 1 then
     --   input = torch.Tensor(inp:size()):copy(inp)
     -- end
     target[i] = out
+    flow[i] = out_fl
   end
   return {
     input = input,
     target = target,
+    flow = flow,
   }
 end
 
