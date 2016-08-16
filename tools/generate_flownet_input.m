@@ -5,7 +5,8 @@ config;
 
 % sample == true is used for visualization only
 % samp = true; num_batch = 1; split = 'all';
-% samp = false; num_batch = 12; split = 'train';
+% samp = false; num_batch = 20; split = 'train';
+% samp = false; num_batch = 20; split = 'val';
 
 n_phase = 16;
 
@@ -65,6 +66,19 @@ for i = 1:num_seq
         end
         save_list_1 = [input_dir num2str(j,'%0d') '_list_1.txt'];
         save_list_2 = [input_dir num2str(j,'%0d') '_list_2.txt'];
+        % get seq ind
+        ind = linspace(j,j+num_fr-1,n_phase);
+        ind = round(ind);
+        % remove overlength indices
+        rep_ind = ind > num_fr;
+        rep_val = max(ind(rep_ind == 0));
+        ind(rep_ind) = [];
+        % assert no identical pairs
+        assert(numel(unique(ind)) == numel(ind));
+        % skip if no pairs
+        if numel(ind) == 1
+            continue
+        end
         % add to script
         % use symlink path on ilcomp
         output_dir = [output_root name_seq '/' num2str(j,'%03d')];
@@ -76,13 +90,9 @@ for i = 1:num_seq
         if exist(save_list_1,'file') && exist(save_list_2,'file')
             continue
         end
-        % get seq ind
-        ind = linspace(j,j+num_fr-1,n_phase);
-        ind = round(ind);
-        ind(ind > num_fr) = num_fr;
         % get list
-        list_1 = list(ind(1:end-1));
-        list_2 = list(ind(2:end));
+        list_2 = list(ind(1:end-1));
+        list_1 = list(ind(2:end));
         % write to file
         write_file_lines(save_list_1, list_1);
         write_file_lines(save_list_2, list_2);
