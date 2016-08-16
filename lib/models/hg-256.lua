@@ -7,35 +7,9 @@ local seqLength
 local hiddenSize
 local numLayers
 
-local function clstm(inp, inputSize, res)
-  -- Replicate encoder output
-  local rep = nn.Replicate(seqLength,2)(inp)
-
-  -- Merge into one mini-batch
-  local x1_ = nn.Transpose({2,3},{3,4})(inp)
-  local x1 = nn.View(-1,inputSize)(x1_)
-
-  -- LSTM
-  local x2 = nn.View(-1,1,inputSize)(x1)
-  local x3 = nn.Padding(1,seqLength-1,1)(x2)
-  local hid = cudnn.LSTM(inputSize,hiddenSize,numLayers,true,0)(x3)
-  local h1 = nn.Contiguous()(hid)
-
-  -- Split from one mini-batch
-  local h2_ = nn.View(-1,res,res,seqLength,hiddenSize)(h1)
-  local h2 = nn.Transpose({3,4},{2,3},{4,5},{3,4})(h2_)
-
-  -- Add residual to encoder output
-  local add = nn.CAddTable()({rep,h2})
-  
-  -- Merge output in batch dimension;
-  return nn.View(-1,hiddenSize,res,res)(add)
-end
-
 local function hourglass(n, f, inp)
   -- Upper branch
   local up1 = Residual(f,f)(inp)
-  local up1 = clstm(up1,f,2^(n+2))
 
   -- Lower branch
   local low1 = nnlib.SpatialMaxPooling(2,2,2,2)(inp)
@@ -45,7 +19,6 @@ local function hourglass(n, f, inp)
   if n > 1 then low3 = hourglass(n-1,f,low2)
   else
     low3 = Residual(f,f)(low2)
-    low3 = clstm(low3,f,2^(n+1))
   end
   local low4 = Residual(f,f)(low3)
   local up2 = nn.SpatialUpSamplingNearest(2)(low4)
@@ -143,19 +116,12 @@ function M.createModel(opt, outputDim)
 end
 
 function M.loadHourglass(model, model_hg)
-  -- Load weight and bias
-  local clstm_gap = 11
   for i = 1, #model_hg.modules do
-    -- Get corresponding module index in model
-    local c = math.max(math.min(math.ceil((i-9)/3),4)*clstm_gap,0) + i
-    if i > 8 + 3 * 4 + 1 then
-      c = c + clstm_gap
-    end
     -- Tie weight and bias
-    local name = torch.typename(model.modules[c])
+    local name = torch.typename(model.modules[i])
     local name_hg = torch.typename(model_hg.modules[i])
     assert(name == name_hg, 'weight loading error: class name mismatch')
-    tieWeightBiasOneModule(model_hg.modules[i], model.modules[c])
+    tieWeightBiasOneModule(model_hg.modules[i], model.modules[i])
   end
 
   -- Zero the gradients; not sure if this is necessary

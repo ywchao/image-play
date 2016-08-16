@@ -143,6 +143,9 @@ end
 function PennCropDataset:getSampledIdx()
   local sidx
   local scnt = 0
+  -- sidx should not depend on the input seqLength
+  local tmp = self.seqLength
+  self.seqLength = 16
   for i = 1, self.ind2sub:size(1) do
     if self.ind2sub[i][2] == 1 then
       scnt = scnt + 1
@@ -159,6 +162,7 @@ function PennCropDataset:getSampledIdx()
     end
     ::continue::
   end
+  self.seqLength = tmp
   return sidx
 end
 

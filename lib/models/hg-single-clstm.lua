@@ -84,6 +84,15 @@ local function tieWeightBiasOneModule(module1, module2)
     module2.bias = module1.bias
     module2.gradBias = module1.gradBias
   end
+  -- Tie parameters for BN layer
+  if module2.running_mean ~= nil then
+    assert(module1.running_mean)
+    assert(module1.running_var)
+    assert(module2.running_var)
+    assert(torch.typename(module1) == torch.typename(module2))
+    module2.running_mean = module1.running_mean
+    module2.running_var = module1.running_var
+  end
 end
 
 function M.createModel(opt, outputDim)
