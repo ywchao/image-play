@@ -41,12 +41,20 @@ classdef penn_crop
         % get phase sequence in global index (ind2sub)
         ind = getPhaseSeq(obj, i);
         
+        % get image path
+        pa = imgpath(obj, idx);
+
+        % load image
+        img = loadImage(obj, idx);
+
         % get dataset size
         out = size(obj);
+
+        input = get(obj, idx);
 
         [sid, fid] = getSeqFrId(obj, idx);
         
         % get sampled indices; for prediction and visualization
-        sidx = getSampleIdx(obj);
+        sidx = getSampledIdx(obj);
     end
 end

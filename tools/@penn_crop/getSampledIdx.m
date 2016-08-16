@@ -1,7 +1,10 @@
-function [ sidx ] = getSampleIdx( obj )
+function [ sidx ] = getSampledIdx( obj )
 
 sidx = [];
 scnt = 0;
+% sidx should not depend on the input seqLength
+tmp = obj.seqLength;
+obj.seqLength = 16;
 for i = 1:size(obj.ind2sub, 1)
     if obj.ind2sub(i, 2) == 1
         scnt = scnt + 1;
@@ -17,6 +20,7 @@ for i = 1:size(obj.ind2sub, 1)
         end
     end
 end
+obj.seqLength = tmp;
 
 end
 
