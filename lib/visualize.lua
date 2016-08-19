@@ -79,20 +79,21 @@ local function drawOutput(input, hms, coords, dataset)
   return im
 end
 
--- Draw predicted pose and transformed image
-local function drawOutputTF(input, hms, coords, tf, dataset)
-  local tf_ = image.scale(tf,256)
-  local im, hms, coords = drawSkeleton(tf_, hms, coords, dataset)
+-- Draw predicted pose and predicted/gt image
+local function drawOutputIm(input, hms, coords, prim, gtim, dataset)
+  local gtim_ = image.scale(gtim,256)
+  local prim_ = image.scale(prim,256)
+  local im, hms, coords = drawSkeleton(prim_, hms, coords, dataset)
 
   local colorHms = {}
-  local tf = tf:double():mul(0.3)
+  local prim = prim:double():mul(0.3)
   for i = 1, hms:size(1) do
     colorHms[i] = colorHM(hms[i])
-    colorHms[i]:mul(.7):add(tf)
+    colorHms[i]:mul(.7):add(prim)
   end
   local totalHm = compileImages(colorHms, 4, 4, 64)
-  im = compileImages({input,im,totalHm}, 1, 3, 256)
-  im = image.scale(im,1134)
+  im = compileImages({input,gtim_,im,totalHm}, 1, 4, 256)
+  im = image.scale(im,1512)
   return im
 end
 
@@ -114,11 +115,15 @@ function M.run(loaders, split, opt, seqlen)
   local heatmaps = f:read('heatmaps'):all()
   assert(heatmaps:size(1) == loaders[split]:sizeSampled())
   assert(heatmaps:size(2) == opt.seqLength)
-  local trans
-  if f._rootGroup._children['trans'] ~= nil then
-    trans = f:read('trans'):all()
-    assert(trans:size(1) == loaders[split]:sizeSampled())
-    assert(trans:size(2) == opt.seqLength)
+  local images, gtimages
+  if paths.filep(opt.save .. '/images_' .. split .. '.h5') then
+    f = hdf5.open(opt.save .. '/images_' .. split .. '.h5', 'r')
+    images = f:read('images'):all()
+    gtimages = f:read('gtimages'):all()
+    assert(images:size(1) == loaders[split]:sizeSampled())
+    assert(images:size(2) == opt.seqLength)
+    assert(gtimages:size(1) == loaders[split]:sizeSampled())
+    assert(gtimages:size(2) == opt.seqLength)
   end
 
   print("=> Visualizing predictions ...")
@@ -153,9 +158,10 @@ function M.run(loaders, split, opt, seqlen)
       assert(idx:numel() == 1, 'index not found')
       local hm = heatmaps[idx[1]][j]:clone()
       hm[hm:lt(0)] = 0
-      local tf
-      if trans ~= nil then
-        tf = trans[idx[1]][j]:clone()
+      local prim, gtim
+      if images ~= nil then
+        prim = images[idx[1]][j]:clone()
+        gtim = gtimages[idx[1]][j]:clone()
       end
 
       -- Get predictions
@@ -165,10 +171,10 @@ function M.run(loaders, split, opt, seqlen)
       -- Display and save the result
       preds:mul(4)
       local dispImg
-      if tf == nil then
+      if images == nil then
         dispImg = drawOutput(inp, hm, preds, opt.dataset)
       else
-        dispImg = drawOutputTF(inp, hm, preds, tf, opt.dataset)
+        dispImg = drawOutputIm(inp, hm, preds, prim, gtim, opt.dataset)
       end
 
       -- Save output

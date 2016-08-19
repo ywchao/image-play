@@ -17,8 +17,24 @@ function Trainer:__init(model, criterion, opt, optimState)
   self.opt = opt
   self.params, self.gradParams = model:getParameters()
   if #model:findModules('nn.SplitTable') == 2 then
-    self.predFl = true
+    local stab_ind = {}
+    for i, m in ipairs(model.modules) do
+      if torch.type(m) == 'nn.SplitTable' then
+        table.insert(stab_ind, i)
+      end
+    end
+    assert(#stab_ind == 2)
+    assert(torch.type(model.modules[stab_ind[1]-2]) == 'cudnn.SpatialConvolution')
+    if model.modules[stab_ind[2]-2].nOutputPlane == 3 then
+      self.predIm = true
+      self.predFl = false
+    end
+    if model.modules[stab_ind[2]-2].nOutputPlane == 2 then
+      self.predIm = false
+      self.predFl = true
+    end
   else
+    self.predIm = false
     self.predFl = false
   end
   self.logger = {
@@ -41,7 +57,12 @@ function Trainer:initLogger(logger)
   for i = 1, self.opt.seqLength do
     names[#names+1] = 'acc' .. i .. 'p'
   end
-  if self.predFl then
+  if self.predIm and not self.predFl then
+    for i = 1, self.opt.seqLength do
+      names[#names+1] = 'loss' .. i .. 'i'
+    end
+  end
+  if not self.predIm and self.predFl then
     for i = 1, self.opt.seqLength do
       names[#names+1] = 'loss' .. i .. 'f'
     end
@@ -82,16 +103,33 @@ function Trainer:train(epoch, loaders)
     -- Get input and target
     local input = sample.input[1]
     local target_ps = sample.target_ps
+    local target_im = sample.target_im
     local target_fl = sample.target_fl
 
     -- Convert to CUDA
-    input, target_ps, target_fl = self:convertCuda(input, target_ps, target_fl)
+    input, target_ps, target_im, target_fl =
+        self:convertCuda(input, target_ps, target_im, target_fl)
   
     -- Forward pass
     local output = self.model:forward(input)
-    local loss_ps, loss_fl = {}, {}
+    local loss_ps, loss_im, loss_fl = {}, {}, {}
     local acc_ps = {}
-    if self.predFl then
+    if self.predIm and not self.predFl then
+      self.criterion:forward(self.model.output, {target_ps, target_im})
+      for j = 1, #output[1] do
+        if j <= self.seqlen then
+          loss_ps[j] = self.criterion.criterions[1].criterions[j].output
+          loss_im[j] = self.criterion.criterions[2].criterions[j].output
+          acc_ps[j] = self:computeAccuracy(output[1][j]:contiguous(), target_ps[j])
+        else
+          loss_ps[j] = 0
+          loss_im[j] = 0
+          acc_ps[j] = 0/0
+        end
+        loss_fl[j] = 0/0
+      end
+    end
+    if not self.predIm and self.predFl then
       self.criterion:forward(self.model.output, {target_ps, target_fl})
       for j = 1, #output[1] do
         if j <= self.seqlen then
@@ -103,8 +141,10 @@ function Trainer:train(epoch, loaders)
           loss_fl[j] = 0
           acc_ps[j] = 0/0
         end
+        loss_im[j] = 0/0
       end
-    else
+    end
+    if not self.predIm and not self.predFl then
       self.criterion:forward(self.model.output, target_ps)
       for j = 1, #output do
         if j <= self.seqlen then
@@ -114,6 +154,7 @@ function Trainer:train(epoch, loaders)
           loss_ps[j] = 0
           acc_ps[j] = 0/0
         end
+        loss_im[j] = 0/0
         loss_fl[j] = 0/0
       end
     end
@@ -121,9 +162,13 @@ function Trainer:train(epoch, loaders)
 
     -- Backprop
     self.model:zeroGradParameters()
-    if self.predFl then
+    if self.predIm and not self.predFl then
+      self.criterion:backward(self.model.output, {target_ps, target_im})
+    end
+    if not self.predIm and self.predFl then
       self.criterion:backward(self.model.output, {target_ps, target_fl})
-    else
+    end
+    if not self.predIm and not self.predFl then
       self.criterion:backward(self.model.output, target_ps)
     end
     self.model:backward(input, self.criterion.gradInput)
@@ -144,7 +189,12 @@ function Trainer:train(epoch, loaders)
     for j = 1, self.opt.seqLength do
       entry[#entry+1] = string.format("%.5f" % acc_ps[j])
     end
-    if self.predFl then
+    if self.predIm and not self.predFl then
+      for j = 1, self.opt.seqLength do
+        entry[#entry+1] = string.format("%.5f" % loss_im[j])
+      end
+    end
+    if not self.predIm and self.predFl then
       for j = 1, self.opt.seqLength do
         entry[#entry+1] = string.format("%.5f" % loss_fl[j])
       end
@@ -183,9 +233,10 @@ function Trainer:test(epoch, iter, loaders, split)
   )
   local dataloader = loaders[split]
   local size = dataloader:size()
-  local lossSum_ps, lossSum_fl, accSum_ps = {}, {}, {}
+  local lossSum_ps, lossSum_im, lossSum_fl, accSum_ps = {}, {}, {}, {}
   for i = 1, self.opt.seqLength do
     lossSum_ps[i] = 0.0
+    lossSum_im[i] = 0.0
     lossSum_fl[i] = 0.0
     accSum_ps[i] = 0.0
   end
@@ -204,16 +255,33 @@ function Trainer:test(epoch, iter, loaders, split)
     -- Get input and target
     local input = sample.input[1]
     local target_ps = sample.target_ps
+    local target_im = sample.target_im
     local target_fl = sample.target_fl
 
     -- Convert to CUDA
-    input, target_ps, target_fl = self:convertCuda(input, target_ps, target_fl)
+    input, target_ps, target_im, target_fl =
+        self:convertCuda(input, target_ps, target_im, target_fl)
 
     -- Forward pass
     local output = self.model:forward(input)
-    local loss_ps, loss_fl = {}, {}
+    local loss_ps, loss_im, loss_fl = {}, {}, {}
     local acc_ps = {}
-    if self.predFl then
+    if self.predIm and not self.predFl then
+      self.criterion:forward(self.model.output, {target_ps, target_im})
+      for j = 1, #output[1] do
+        if j <= self.seqlen then
+          loss_ps[j] = self.criterion.criterions[1].criterions[j].output
+          loss_im[j] = self.criterion.criterions[2].criterions[j].output
+          acc_ps[j] = self:computeAccuracy(output[1][j]:contiguous(), target_ps[j])
+        else
+          loss_ps[j] = 0
+          loss_im[j] = 0
+          acc_ps[j] = 0/0
+        end
+        loss_fl[j] = 0/0
+      end
+    end
+    if not self.predIm and self.predFl then
       self.criterion:forward(self.model.output, {target_ps, target_fl})
       for j = 1, #output[1] do
         if j <= self.seqlen then
@@ -225,8 +293,10 @@ function Trainer:test(epoch, iter, loaders, split)
           loss_fl[j] = 0
           acc_ps[j] = 0/0
         end
+        loss_im[j] = 0/0
       end
-    else
+    end
+    if not self.predIm and not self.predFl then
       self.criterion:forward(self.model.output, target_ps)
       for j = 1, #output do
         if j <= self.seqlen then
@@ -236,6 +306,7 @@ function Trainer:test(epoch, iter, loaders, split)
           loss_ps[j] = 0
           acc_ps[j] = 0/0
         end
+        loss_im[j] = 0/0
         loss_fl[j] = 0/0
       end
     end
@@ -246,6 +317,7 @@ function Trainer:test(epoch, iter, loaders, split)
       local batchSize = input:size(1)
       for j = 1, self.opt.seqLength do
         lossSum_ps[j] = lossSum_ps[j] + loss_ps[j]
+        lossSum_im[j] = lossSum_im[j] + loss_im[j]
         lossSum_fl[j] = lossSum_fl[j] + loss_fl[j]
         accSum_ps[j] = accSum_ps[j] + acc_ps[j]
       end
@@ -259,6 +331,7 @@ function Trainer:test(epoch, iter, loaders, split)
   -- Compute mean loss and accuracy
   for i = 1, self.opt.seqLength do
     lossSum_ps[i] = lossSum_ps[i] / N
+    lossSum_im[i] = lossSum_im[i] / N
     lossSum_fl[i] = lossSum_fl[i] / N
     accSum_ps[i] = accSum_ps[i] / N
   end
@@ -276,7 +349,12 @@ function Trainer:test(epoch, iter, loaders, split)
   for j = 1, self.opt.seqLength do
     entry[#entry+1] = string.format("%.5f" % accSum_ps[j])
   end
-  if self.predFl then
+  if self.predIm and not self.predFl then
+    for j = 1, self.opt.seqLength do
+      entry[#entry+1] = string.format("%.5f" % lossSum_im[j])
+    end
+  end
+  if not self.predIm and self.predFl then
     for j = 1, self.opt.seqLength do
       entry[#entry+1] = string.format("%.5f" % lossSum_fl[j])
     end
@@ -287,7 +365,7 @@ end
 function Trainer:predict(loaders, split)
   local dataloader = loaders[split]
   local sidx = torch.LongTensor(dataloader:sizeSampled())
-  local heatmaps, flows, gtflows
+  local heatmaps, images, gtimages, flows, gtflows
 
   print("=> Generating predictions ...")
   xlua.progress(0, dataloader:sizeSampled())
@@ -298,10 +376,12 @@ function Trainer:predict(loaders, split)
     local index = sample.index
     local input = sample.input[1]
     local target_ps = sample.target_ps
+    local target_im = sample.target_im
     local target_fl = sample.target_fl
 
     -- Convert to CUDA
-    input, target_ps, target_fl = self:convertCuda(input, target_ps, target_fl)
+    input, target_ps, target_im, target_fl =
+        self:convertCuda(input, target_ps, target_im, target_fl)
 
     -- Forward pass
     local output = self.model:forward(input)
@@ -312,7 +392,17 @@ function Trainer:predict(loaders, split)
           dataloader:sizeSampled(), self.opt.seqLength,
           target_ps[1]:size(2), self.opt.outputRes, self.opt.outputRes
       )
-      if self.predFl then
+      if self.predIm and not self.predFl then
+        images = torch.FloatTensor(
+          dataloader:sizeSampled(), self.opt.seqLength,
+          3, self.opt.outputRes, self.opt.outputRes
+        )
+        gtimages = torch.FloatTensor(
+          dataloader:sizeSampled(), self.opt.seqLength,
+          3, self.opt.outputRes, self.opt.outputRes
+        )
+      end
+      if not self.predIm and self.predFl then
         flows = torch.FloatTensor(
           dataloader:sizeSampled(), self.opt.seqLength,
           2, self.opt.outputRes, self.opt.outputRes
@@ -325,7 +415,16 @@ function Trainer:predict(loaders, split)
     end
     assert(input:size(1) == 1, 'batch size must be 1 with run({pred=true})')
     sidx[i] = index[1]
-    if self.predFl then
+    if self.predIm and not self.predFl then
+      for j = 1, #output[1] do
+        heatmaps[i][j]:copy(output[1][j][1])
+        -- heatmaps[i][j]:copy(target_ps[2][j][1])
+        -- Get image and target_im
+        images[i][j]:copy(output[2][j][1])
+        gtimages[i][j]:copy(target_im[j][1])
+      end
+    end
+    if not self.predIm and self.predFl then
       for j = 1, #output[1] do
         heatmaps[i][j]:copy(output[1][j][1])
         -- heatmaps[i][j]:copy(target_ps[2][j][1])
@@ -333,7 +432,8 @@ function Trainer:predict(loaders, split)
         flows[i][j]:copy(output[2][j][1])
         gtflows[i][j]:copy(target_fl[j][1])
       end
-    else
+    end
+    if not self.predIm and not self.predFl then
       for j = 1, #output do
         heatmaps[i][j]:copy(output[j][1])
         -- heatmaps[i][j]:copy(target_ps[j][1])
@@ -347,7 +447,11 @@ function Trainer:predict(loaders, split)
   -- Sort heatmaps by index
   local sidx, i = torch.sort(sidx)
   heatmaps = heatmaps:index(1, i)
-  if self.predFl then
+  if self.predIm and not self.predFl then
+    images = images:index(1, i)
+    gtimages = gtimages:index(1, i)
+  end
+  if not self.predIm and self.predFl then
     flows = flows:index(1, i)
     gtflows = gtflows:index(1, i)
   end
@@ -358,8 +462,16 @@ function Trainer:predict(loaders, split)
   f:write('heatmaps', heatmaps)
   f:close()
 
+  -- Save image separately
+  if self.predIm and not self.predFl then
+    local f = hdf5.open(self.opt.save .. '/images_' .. split .. '.h5', 'w')
+    f:write('images', images)
+    f:write('gtimages', gtimages)
+    f:close()
+  end
+
   -- Save flow separately
-  if self.predFl then
+  if not self.predIm and self.predFl then
     local f = hdf5.open(self.opt.save .. '/flows_' .. split .. '.h5', 'w')
     f:write('flows', flows)
     f:write('gtflows', gtflows)
@@ -373,7 +485,7 @@ function Trainer:setCriterionWeight(epoch)
   -- seqlen = math.ceil(epoch / self.opt.currInt) + 1
   seqlen = 2 ^ math.ceil(epoch / self.opt.currInt)
   seqlen = math.min(seqlen, self.opt.seqLength)
-  if self.predFl then
+  if self.predIm or self.predFl then
     for i = 1, #self.criterion.criterions[1].weights do
       if i <= seqlen then
         self.criterion.criterions[1].weights[i] = 1
@@ -395,13 +507,14 @@ function Trainer:setCriterionWeight(epoch)
   self.seqlen = seqlen
 end
 
-function Trainer:convertCuda(input, target_ps, target_fl)
+function Trainer:convertCuda(input, target_ps, target_im, target_fl)
   input = input:cuda()
   for i = 1, #target_ps do
     target_ps[i] = target_ps[i]:cuda()
+    target_im[i] = target_im[i]:cuda()
     target_fl[i] = target_fl[i]:cuda()
   end
-  return input, target_ps, target_fl
+  return input, target_ps, target_im, target_fl
 end
 
 function Trainer:computeAccuracy(output, target)
