@@ -2,15 +2,11 @@ figure(1);
 
 % choose experiment
 
-% exp_name = 'seq16-hg-pf-clstm';
+% exp_name = 'seq16-hg-pi-clstm';
 % epoch_size = 39379;
 % disp_int = 2000;
 
-% exp_name = 'seq16-hg-pf-res-clstm';
-% epoch_size = 39379;
-% disp_int = 2000;
-
-% exp_name = 'seq16-hg-pf-res-clstm-resf';
+% exp_name = 'seq16-hg-pi-res-clstm';
 % epoch_size = 39379;
 % disp_int = 2000;
 
@@ -51,7 +47,7 @@ for i = 1:max_epoch
 end
 it = (epoch(ind)-1)*epoch_size + iter(ind);
 
-subplot(2,3,1);
+subplot('Position',[0.03+0/3 0.55 1/3-0.03 0.4]);
 plot(it,loss_p(ind,1),'--r'); hold on;
 plot(it,loss_p(ind,2),'r');
 for i = 3:16
@@ -66,7 +62,7 @@ axis([0 it(end) ylim]);
 title('training loss pose');
 xlabel('iteration');
 
-subplot(2,3,2);
+subplot('Position',[0.03+1/3 0.55 1/3-0.03 0.4]);
 plot(it,acc_p(ind,1),'--r'); hold on;
 plot(it,acc_p(ind,2),'r');
 for i = 3:16
@@ -77,11 +73,11 @@ for i = 3:16
     plot(it_t,acc_p(ind_t,i),'color',[1-clr,0,clr]);
 end
 grid on;
-axis([0 it(end) 0 1]);
+axis([0 it(end) ylim]);
 title('training accuracy pose');
 xlabel('iteration');
 
-subplot(2,3,3);
+subplot('Position',[0.03+2/3 0.55 1/3-0.03 0.4]);
 plot(it,loss_i(ind,1),'--r'); hold on;
 plot(it,loss_i(ind,2),'r');
 for i = 3:16
@@ -113,7 +109,7 @@ end
 
 it = (epoch-1)*epoch_size + iter;
 
-subplot(2,3,4);
+subplot('Position',[0.03+0/3 0.05 1/3-0.03 0.4]);
 plot(it,loss_p(:,1),'--ro','MarkerSize',2); hold on;
 plot(it,loss_p(:,2),'-ro','MarkerSize',2);
 for i = 3:16
@@ -127,7 +123,7 @@ grid on;
 title('validation loss pose');
 xlabel('iteration');
 
-subplot(2,3,5);
+subplot('Position',[0.03+1/3 0.05 1/3-0.03 0.4]);
 plot(it,acc_p(:,1),'--ro','MarkerSize',2); hold on;
 plot(it,acc_p(:,2),'-ro','MarkerSize',2);
 for i = 3:16
@@ -141,7 +137,7 @@ grid on;
 title('validation accuracy pose');
 xlabel('iteration');
 
-subplot(2,3,6);
+subplot('Position',[0.03+2/3 0.05 1/3-0.03 0.4]);
 plot(it,loss_i(:,1),'--ro','MarkerSize',2); hold on;
 plot(it,loss_i(:,2),'-ro','MarkerSize',2);
 for i = 3:16
@@ -156,30 +152,37 @@ title('validation loss image');
 xlabel('iteration');
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-subplot(2,3,1); set(gca,'fontsize',3);
-subplot(2,3,2); set(gca,'fontsize',3);
-subplot(2,3,3); set(gca,'fontsize',3);
-subplot(2,3,4); set(gca,'fontsize',3);
-subplot(2,3,5); set(gca,'fontsize',3);
-subplot(2,3,6); set(gca,'fontsize',3);
+subplot('Position',[0.03+0/3 0.55 1/3-0.03 0.4]); set(gca,'fontsize',5);
+subplot('Position',[0.03+1/3 0.55 1/3-0.03 0.4]); set(gca,'fontsize',5);
+subplot('Position',[0.03+2/3 0.55 1/3-0.03 0.4]); set(gca,'fontsize',5);
+subplot('Position',[0.03+0/3 0.05 1/3-0.03 0.4]); set(gca,'fontsize',5);
+subplot('Position',[0.03+1/3 0.05 1/3-0.03 0.4]); set(gca,'fontsize',5);
+subplot('Position',[0.03+2/3 0.05 1/3-0.03 0.4]); set(gca,'fontsize',5);
 
-subplot(2,3,1);
+subplot('Position',[0.03+0/3 0.55 1/3-0.03 0.4]);
 lim = [xlim, ylim];
-subplot(2,3,4);
-axis(lim);
-subplot(2,3,2);
+axis([lim(1:2) 0 0.01]);
+subplot('Position',[0.03+0/3 0.05 1/3-0.03 0.4]);
+axis([lim(1:2) 0.0015 0.0045]);
+
+subplot('Position',[0.03+1/3 0.55 1/3-0.03 0.4]);
 lim = [xlim, ylim];
-subplot(2,3,5);
-axis(lim);
-subplot(2,3,3);
+axis([lim(1:2) 0 1]);
+subplot('Position',[0.03+1/3 0.05 1/3-0.03 0.4]);
+axis([lim(1:2) 0.35 0.90]);
+set(gca,'YTick',0.35:0.05:0.90);
+
+subplot('Position',[0.03+2/3 0.55 1/3-0.03 0.4]);
 lim = [xlim, ylim];
-subplot(2,3,6);
-axis(lim);
+axis([lim(1:2) 0 0.05]);
+subplot('Position',[0.03+2/3 0.05 1/3-0.03 0.4]);
+axis([lim(1:2) 0 0.025]);
 
 % save to file
 save_file = ['outputs/plot_' exp_name '.pdf'];
 if ~exist(save_file,'file')
-    set(gcf,'PaperPosition',[0 0 8 3]);
+    set(gcf,'PaperPosition',[0 0 10.8 5]);
+    set(gcf,'PaperOrientation','landscape');
     print(gcf,save_file,'-dpdf');
 end
 
