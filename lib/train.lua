@@ -191,6 +191,11 @@ function Trainer:test(epoch, iter, loaders, split)
   end
   local N = 0
 
+  -- Set seqlen if test at iter 0
+  if epoch == 0 and iter == 0 then
+    self.seqlen = self.opt.seqLength
+  end
+
   print("=> Test on " .. split)
   xlua.progress(0, size)
 
