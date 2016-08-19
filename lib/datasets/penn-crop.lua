@@ -58,11 +58,16 @@ function PennCropDataset:_getPhaseSeq(i)
   rep_ind = self.ind2sub:index(1,ind:long())[{{},1}]:ne(id)
   rep_val = torch.max(ind[rep_ind:eq(0)])
   ind[rep_ind] = rep_val
+  -- has_flow
+  has_flow = torch.ByteTensor(ind:numel())
+  has_flow:sub(1,has_flow:numel()-1):copy(ind:sub(1,ind:numel()-1):ne(ind:sub(2,ind:numel())))
+  has_flow[has_flow:numel()] = 0
   -- Drop frames over LSTM sequence length
   if ind:size(1) ~= self.seqLength then
     ind = ind[{{1, self.seqLength}}]
+    has_flow = has_flow[{{1, self.seqLength}}]
   end
-  return ind
+  return ind, has_flow
 end
 
 -- Get image path
@@ -110,7 +115,7 @@ function PennCropDataset:get(idx)
   local img, center, scale, fl
   local inp, out, out_fl
 
-  local phaseSeq = self:_getPhaseSeq(idx)
+  local phaseSeq, hasFlow = self:_getPhaseSeq(idx)
   for i = 1, phaseSeq:numel() do
     pidx = phaseSeq[i]
     -- Load image
@@ -131,7 +136,7 @@ function PennCropDataset:get(idx)
       end
     end
     -- Load and transform flow
-    if i == self.nPhase or pidx == phaseSeq[i+1] then
+    if hasFlow[i] == 0 then
       out_fl = torch.zeros(2, self.outputRes, self.outputRes)
       -- out_fl = torch.randn(2, self.outputRes, self.outputRes):mul(0.25)
     else
