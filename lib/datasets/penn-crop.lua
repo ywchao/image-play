@@ -21,6 +21,7 @@ function PennCropDataset:__init(opt, split)
   self.seqId, self.nFrame = unpack(self:_preproAnno())
   -- Get phase number and LSTM sequence length
   self.nPhase = opt.nPhase
+  self.seqType = opt.seqType
   self.seqLength = opt.seqLength
   -- Get input and output resolution
   self.inputRes = opt.inputRes
@@ -39,15 +40,21 @@ function PennCropDataset:_preproAnno()
   return {seqId, nFrame}
 end
 
--- Get phase sequence in global index (ind2sub)
-function PennCropDataset:_getPhaseSeq(i)
+-- Get sequence in global index (ind2sub)
+function PennCropDataset:_getSeq(i)
   local id = self.ind2sub[i][1]
-  local ii = self.seqId:eq(id)
-  local nFrame = self.nFrame[ii][1]
   -- Get frame index
-  local ind = torch.linspace(i, i+nFrame-1, self.nPhase)
-  local ind = torch.round(ind)
-  assert(ind:numel() == self.nPhase)
+  local ind
+  if self.seqType == 'phase' then
+    local ii = self.seqId:eq(id)
+    local nFrame = self.nFrame[ii][1]
+    ind = torch.linspace(i, i+nFrame-1, self.nPhase)
+    ind = torch.round(ind)
+    assert(ind:numel() == self.nPhase)
+  end
+  if self.seqType == 'raw' then
+    ind = torch.range(i,i+self.seqLength-1)
+  end
   -- Replace overlength indices with the last index
   local rep_ind, rep_val
   -- ind2sub
@@ -63,7 +70,7 @@ function PennCropDataset:_getPhaseSeq(i)
   has_flow:sub(1,has_flow:numel()-1):copy(ind:sub(1,ind:numel()-1):ne(ind:sub(2,ind:numel())))
   has_flow[has_flow:numel()] = 0
   -- Drop frames over LSTM sequence length
-  if ind:size(1) ~= self.seqLength then
+  if self.seqType == 'phase' and ind:size(1) ~= self.seqLength then
     ind = ind[{{1, self.seqLength}}]
     has_flow = has_flow[{{1, self.seqLength}}]
   end
@@ -93,13 +100,25 @@ end
 
 -- Get flow path
 function PennCropDataset:_flowpath(idx, i)
-  return string.format('%04d/%03d/flownets-pred-%07d.flo',self.ind2sub[idx][1],self.ind2sub[idx][2],i-1)
+  if self.seqType == 'phase' then
+    return string.format('%04d/%03d/flownets-pred-%07d.flo',self.ind2sub[idx][1],self.ind2sub[idx][2],i-1)
+  end
+  if self.seqType == 'raw' then
+    local seqIdx = self:_getSeq(idx)
+    local sid = seqIdx[i]
+    return string.format('%04d/flownets-pred-%07d.flo',self.ind2sub[sid][1],self.ind2sub[sid][2]-1)
+  end
 end
 
 -- Load flow
 function PennCropDataset:_loadFlow(idx, i)
-  assert(self.nPhase == 16)
-  return readFlowFile(paths.concat('flownet-release/models/flownet/res_penn-crop/',self:_flowpath(idx,i)))
+  if self.opt.seqType == 'phase' then
+    assert(self.nPhase == 16)
+    return readFlowFile(paths.concat('flownet-release/models/flownet/res_penn-crop/',self:_flowpath(idx,i)))
+  end
+  if self.opt.seqType == 'raw' then
+    return readFlowFile(paths.concat('flownet-release/models/flownet/res_penn-crop_noskip/',self:_flowpath(idx,i)))
+  end
 end
 
 -- Get dataset size
@@ -115,11 +134,11 @@ function PennCropDataset:get(idx)
   local img, center, scale, fl
   local inp, out, out_fl
 
-  local phaseSeq, hasFlow = self:_getPhaseSeq(idx)
-  for i = 1, phaseSeq:numel() do
-    pidx = phaseSeq[i]
+  local seqIdx, hasFlow = self:_getSeq(idx)
+  for i = 1, seqIdx:numel() do
+    sid = seqIdx[i]
     -- Load image
-    img = self:_loadImage(pidx)
+    img = self:_loadImage(sid)
     -- Get center and scale (same for all frames)
     if i == 1 then
       center, scale = unpack(self:_getCenterScale(img))
@@ -127,8 +146,8 @@ function PennCropDataset:get(idx)
     -- Transform image
     inp = crop(img, center, scale, 0, self.inputRes)
     -- Generate target
-    local pts = self.part[pidx]
-    local vis = self.visible[pidx]
+    local pts = self.part[sid]
+    local vis = self.visible[sid]
     out = torch.zeros(pts:size(1), self.outputRes, self.outputRes)
     for j = 1, pts:size(1) do
       if vis[j] == 1 then
@@ -176,7 +195,9 @@ function PennCropDataset:getSampledIdx()
   local sidx
   local scnt = 0
   -- sidx should not depend on the input seqLength
-  local tmp = self.seqLength
+  local seqType_ = self.seqType
+  local seqLength_ = self.seqLength
+  self.seqType = 'phase'
   self.seqLength = 16
   for i = 1, self.ind2sub:size(1) do
     if self.ind2sub[i][2] == 1 then
@@ -185,16 +206,17 @@ function PennCropDataset:getSampledIdx()
       if self.split == 'train' and scnt % 10 ~= 1 then
         goto continue
       end
-      local phaseSeq = self:_getPhaseSeq(i)
+      local seqIdx = self:_getSeq(i)
       if not sidx then
-        sidx = phaseSeq
+        sidx = seqIdx
       else
-        sidx = torch.cat(sidx, phaseSeq, 1)
+        sidx = torch.cat(sidx, seqIdx, 1)
       end
     end
     ::continue::
   end
-  self.seqLength = tmp
+  self.seqType = seqType_
+  self.seqLength = seqLength_
   return sidx
 end
 

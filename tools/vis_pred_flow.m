@@ -3,10 +3,14 @@ addpath('./ijcv_flow_code/utils/flowColorCode');
 
 % set parameters
 
-% split = 'val';
 % split = 'train';
+% split = 'val';
 
-exp = 'seq16-hg-pf-res-clstm';
+% exp = 'seq16-hg-pf-res-clstm';
+% opt.seqType = 'phase';
+
+% exp = 'seq16raw-hg-pf-res-clstm';
+% opt.seqType = 'raw';
 
 opt.data = './data/Penn_Action_cropped';
 opt.nPhase = 16;
@@ -39,9 +43,7 @@ for i = 1:numel(sidx)
     [sid, fid] = dataset.getSeqFrId(sidx(i));
     % set vis dir
     vis_dir = [vis_root num2str(sid,'%04d') '/'];
-    if ~exist(vis_dir,'dir')
-        makedir(vis_dir);
-    end
+    makedir(vis_dir);
     % skip if all exist
     list_file = dir([vis_dir sprintf('%03d-',fid) '*']);
     list_file = {list_file.name}';
