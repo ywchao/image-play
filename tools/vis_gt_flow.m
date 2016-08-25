@@ -5,7 +5,8 @@ addpath('./ijcv_flow_code/utils');
 addpath('./ijcv_flow_code/utils/flowColorCode');
 
 % set parameters
-samp = true;
+% samp = true; skip = true;
+% samp = false; skip = false;
 
 n_phase = 16;
 
@@ -14,8 +15,17 @@ list_seq = dir([label_root '*.mat']);
 list_seq = {list_seq.name}';
 num_seq = numel(list_seq);
 
-res_root = './flownet-release/models/flownet/res_penn-crop_samp/';
-vis_root = './flownet-release/models/flownet/vis_penn-crop_samp/';
+postfix = '';
+if samp
+    postfix = '_samp';
+end
+if ~skip
+    assert(~samp);
+    postfix = '_noskip';
+end
+
+res_root = ['./flownet-release/models/flownet/res_penn-crop' postfix '/'];
+vis_root = ['./flownet-release/models/flownet/vis_penn-crop' postfix '/'];
 
 % first K videos for each action
 K = 3;
@@ -35,7 +45,6 @@ end
 
 figure(1);
 
-% for i = 1:num_seq
 for i = seq
     tic_print(sprintf('  %04d/%04d\n',i,num_seq));
     % read frames in sequence
@@ -49,25 +58,31 @@ for i = seq
     anno = load(lb_file);
     assert(anno.nframes == numel(list_fr));
     for j = 1:anno.nframes
-        % for now just consider one sequence
-        if samp && j > 1
-            continue
+        if skip
+            % for now just consider one sequence
+            if samp && j > 1
+                continue
+            end
+            % set and make directories
+            res_dir = [res_root name_seq '/' num2str(j,'%03d') '/'];
+            vis_dir = [vis_root name_seq '/' num2str(j,'%03d') '/'];
+            makedir(vis_dir);
+            % get seq ind
+            ind = linspace(j,j+num_fr-1,n_phase);
+            ind = round(ind);
+        else
+            % set and make directories
+            res_dir = [res_root name_seq '/'];
+            vis_dir = [vis_root name_seq '/' num2str(j,'%03d') '/'];
+            makedir(vis_dir);
+            % get seq ind
+            ind = j:j+n_phase-1;
         end
-        % set and make directories
-        res_dir = [res_root name_seq '/' num2str(j,'%03d') '/'];
-        vis_dir = [vis_root name_seq '/' num2str(j,'%03d') '/'];
-        makedir(vis_dir);
-        % get seq ind
-        ind = linspace(j,j+num_fr-1,n_phase);
-        ind = round(ind);
         % remove overlength indices
         rep_ind = ind > num_fr;
         rep_val = max(ind(rep_ind == 0));
         ind(rep_ind) = [];
-        % set count
-        count = -1;
         for k = 1:numel(ind)-1
-            count = count + 1;
             vis_file = [vis_dir num2str(ind(k),'%04d') '_' num2str(ind(k+1),'%04d') '.png'];
             % skip if existed
             if exist(vis_file,'file')
@@ -75,7 +90,11 @@ for i = seq
             end
             im_file_1 = [fr_dir list_fr{ind(k)}];
             im_file_2 = [fr_dir list_fr{ind(k+1)}];
-            im_file_f = [res_dir 'flownets-pred-' num2str(count,'%07d') '.flo'];
+            if skip
+                im_file_f = [res_dir 'flownets-pred-' num2str(k-1,'%07d') '.flo'];
+            else
+                im_file_f = [res_dir 'flownets-pred-' num2str(ind(k)-1,'%07d') '.flo'];
+            end
             im_1 = imread(im_file_1);
             im_2 = imread(im_file_2);
             im_f = readFlowFile(im_file_f);
