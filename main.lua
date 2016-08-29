@@ -16,11 +16,9 @@ local checkpoint, optimState, opt = checkpoints.latest(opt)
 
 cutorch.setDevice(opt.GPU)
 torch.manualSeed(opt.manualSeed)
--- cutorch.manualSeedAll(opt.manualSeed)
+cutorch.manualSeedAll(opt.manualSeed)
 
 -- Create model
--- TODO:
--- Currently using cudnn's LSTM implementation
 nnlib = cudnn
 local model, criterion = models.setup(opt, checkpoint)
 

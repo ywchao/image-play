@@ -45,3 +45,25 @@ function find(X, n)
   local indices = torch.linspace(1,X:size(1),X:size(1)):long()
   return indices[X:eq(n)]
 end
+
+function append(tab1, tab2)
+  local t = {}
+  for i = 1, #tab1 do
+    t[i] = tab1[i]
+  end
+  for i = 1, #tab2 do
+    t[#tab1+i] = tab2[i]
+  end
+  return t
+end
+
+function slice(tab, ind)
+  local t1, t2 = {}, {}
+  for i = 1, ind do
+    table.insert(t1, tab[i])
+  end
+  for i = ind+1, #tab do
+    table.insert(t2, tab[i])
+  end
+  return t1, t2
+end

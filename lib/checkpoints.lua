@@ -44,7 +44,17 @@ end
 
 function checkpoint.save(epoch, model, optimState, isBestModel, opt)
    -- Remove temporary buffers to reduce checkpoint size
-   model:clearState()
+   if torch.type(model) == 'nn.gModule' then
+     model:clearState()
+   end
+   if torch.type(model) == 'table' then
+     model['enc']:clearState()
+     model['dec']:clearState()
+     model['rnn_one']:clearState()
+     for i = 1, #model['rnn'] do
+       model['rnn'][i]:clearState()
+     end
+   end
 
    -- -- Don't save the DataParallelTable for easier loading on other machines
    -- if torch.type(model) == 'nn.DataParallelTable' then
