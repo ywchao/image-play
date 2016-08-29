@@ -22,7 +22,7 @@ opt.outputRes = 64;
 h5_flow = ['./exp/penn-crop/' exp '/flows_' split '.h5'];
 
 % set output dir
-vis_root = ['./outputs/flows_' split '/' exp '/'];
+vis_root = ['./outputs/flows_' opt.seqType '_' split '/' exp '/'];
 
 % load flow and gt flow
 flows = hdf5read(h5_flow,'flows');
