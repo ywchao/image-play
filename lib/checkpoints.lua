@@ -45,15 +45,16 @@ end
 function checkpoint.save(epoch, model, optimState, isBestModel, opt)
    -- Remove temporary buffers to reduce checkpoint size
    if torch.type(model) == 'nn.gModule' then
-     model:clearState()
+      model:clearState()
    end
+   local rnn_
    if torch.type(model) == 'table' then
-     model['enc']:clearState()
-     model['dec']:clearState()
-     model['rnn_one']:clearState()
-     for i = 1, #model['rnn'] do
-       model['rnn'][i]:clearState()
-     end
+      -- Remove clones
+      rnn_ = model['rnn']
+      model['rnn'] = nil
+      model['enc']:clearState()
+      model['dec']:clearState()
+      model['rnn_one']:clearState()
    end
 
    -- -- Don't save the DataParallelTable for easier loading on other machines
@@ -85,6 +86,11 @@ function checkpoint.save(epoch, model, optimState, isBestModel, opt)
    --    local models = require 'models/init'
    --    models.shareGradInput(model)
    -- end
+
+  if torch.type(model) == 'table' then
+     -- Add clones back
+     model['rnn'] = rnn_
+  end
 end
 
 return checkpoint

@@ -30,9 +30,10 @@ function M.setup(opt, checkpoint)
        Model.createModelEnc ~= nil and
        Model.createModelRNN ~= nil and
        Model.createModelDec ~= nil then
-      model_enc = Model.createModelEnc()
-      model_rnn = Model.createModelRNN(opt)
-      model_dec = Model.createModelDec(outputDim)
+      model = {}
+      model['enc'] = Model.createModelEnc()
+      model['rnn_one'] = Model.createModelRNN(opt)
+      model['dec'] = Model.createModelDec(outputDim)
     end
   
     -- Load hourglass
@@ -47,11 +48,11 @@ function M.setup(opt, checkpoint)
         -- Model.loadHourglassLSTM(model, model_hg)
         error('Not handling this case for now ... ')
       elseif #lstm_nodes == 0 then
-        if model ~= nil and model_enc == nil and model_rnn == nil and model_dec == nil then
+        if torch.type(model) == 'nn.gModule' then
           Model.loadHourglass(model, model_hg)
         end
-        if model == nil and model_enc ~= nil and model_rnn ~= nil and model_dec ~= nil then
-          Model.loadHourglass(model_enc, model_dec, model_hg)
+        if torch.type(model) == 'table' then
+          Model.loadHourglass(model['enc'], model['dec'], model_hg)
         end
       else
         error('initial hourglass model error')
@@ -62,7 +63,7 @@ function M.setup(opt, checkpoint)
   -- Create criterion
   -- Detect image prediction by checking the number of nn.SplitTable
   local criterion
-  if model ~= nil and model_enc == nil and model_rnn == nil and model_dec == nil then
+  if torch.type(model) == 'nn.gModule' then
     if #model:findModules('nn.SplitTable') == 1 then
       -- Pose prediction only
       criterion = nn.ParallelCriterion()
@@ -83,7 +84,7 @@ function M.setup(opt, checkpoint)
       end
     end
   end
-  if model == nil and model_enc ~= nil and model_rnn ~= nil and model_dec ~= nil then
+  if torch.type(model) == 'table' then
     criterion = nn.MSECriterion()
     -- if #model.outnode.data.mapindex == 1 then
     --   -- Pose prediction only
@@ -98,17 +99,13 @@ function M.setup(opt, checkpoint)
   end
 
   -- Convert to CUDA
-  if model ~= nil and model_enc == nil and model_rnn == nil and model_dec == nil then
+  if torch.type(model) == 'nn.gModule' then
     model:cuda()
   end
-  if model == nil and model_enc ~= nil and model_rnn ~= nil and model_dec ~= nil then
-    model_enc:cuda()
-    model_rnn:cuda()
-    model_dec:cuda()
-    model = {}
-    model['enc'] = model_enc
-    model['dec'] = model_dec
-    model['rnn_one'] = model_rnn
+  if torch.type(model) == 'table' then
+    model['enc']:cuda()
+    model['rnn_one']:cuda()
+    model['dec']:cuda()
     -- Check if model is residual type
     if #model['rnn_one']:findModules('nn.CAddTable') == 0 then
       model['res'] = false
