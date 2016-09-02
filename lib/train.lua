@@ -229,6 +229,9 @@ function Trainer:train(epoch, loaders)
       for j = 1, self.seqlen do
         if j == 1 then
           out_enc = self.model['enc']:forward(input)
+          if torch.type(out_enc) ~= 'table' then
+            out_enc = {out_enc}
+          end
           if self.model['res'] then
             inp_rnn = append(out_enc, out_enc)
             if self.model['vae'] then
@@ -260,6 +263,9 @@ function Trainer:train(epoch, loaders)
         else
           inp_dec = out_rnn
         end
+        if #inp_dec == 1 then
+          inp_dec = inp_dec[1]
+        end
         output[j] = self.model['dec']:forward(inp_dec):clone()
         if j < self.seqlen then
           for k, v in ipairs(self.lstm_ind) do
@@ -285,8 +291,15 @@ function Trainer:train(epoch, loaders)
 
         self.criterion:backward(self.model['dec'].output, target_ps[j])
         self.model['dec']:backward(out_rnn, self.criterion.gradInput)
-        for k = 1, #self.model['dec'].gradInput do
-          gradInputDec[j][k] = self.model['dec'].gradInput[k]:clone()
+        if torch.type(self.model['dec'].gradInput) ~= 'table' then
+          self.model['dec'].gradInput = {self.model['dec'].gradInput}
+        end
+        if torch.type(out_rnn) ~= 'table' then
+          gradInputDec[j] = self.model['dec'].gradInput[1]:clone()
+        else
+          for k = 1, #self.model['dec'].gradInput do
+            gradInputDec[j][k] = self.model['dec'].gradInput[k]:clone()
+          end
         end
       end
       for j = self.seqlen+1, self.opt.seqLength do
@@ -363,6 +376,9 @@ function Trainer:train(epoch, loaders)
       end
 
       -- Backward pass for encoder
+      if #gradInputRNNSum == 1 then
+        gradInputRNNSum = gradInputRNNSum[1]
+      end
       if self.model['res'] then
         self.model['enc']:backward(input, gradInputRNNSum)
       else
@@ -532,6 +548,9 @@ function Trainer:test(epoch, iter, loaders, split)
       for j = 1, self.seqlen do
         if j == 1 then
           out_enc = self.model['enc']:forward(input)
+          if torch.type(out_enc) ~= 'table' then
+            out_enc = {out_enc}
+          end
           if self.model['res'] then
             inp_rnn = append(out_enc, out_enc)
             if self.model['vae'] then
@@ -562,6 +581,9 @@ function Trainer:test(epoch, iter, loaders, split)
           inp_dec = slice(out_rnn, #out_enc)
         else
           inp_dec = out_rnn
+        end
+        if #inp_dec == 1 then
+          inp_dec = inp_dec[1]
         end
         output[j] = self.model['dec']:forward(inp_dec):clone()
         if j < self.seqlen then
@@ -694,6 +716,9 @@ function Trainer:predict(loaders, split)
       for j = 1, self.opt.seqLength do
         if j == 1 then
           out_enc = self.model['enc']:forward(input)
+          if torch.type(out_enc) ~= 'table' then
+            out_enc = {out_enc}
+          end
           if self.model['res'] then
             inp_rnn = append(out_enc, out_enc)
             if self.model['vae'] then
@@ -724,6 +749,9 @@ function Trainer:predict(loaders, split)
           inp_dec = slice(out_rnn, #out_enc)
         else
           inp_dec = out_rnn
+        end
+        if #inp_dec == 1 then
+          inp_dec = inp_dec[1]
         end
         output[j] = self.model['dec']:forward(inp_dec):clone()
         if j < self.opt.seqLength then
