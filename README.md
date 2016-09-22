@@ -16,6 +16,12 @@
   ln -s $PENN_ROOT ./external/Penn_Action
   ```
 
+0. Crop the Penn Action dataset.
+  ```Shell
+  cd $IMPLAY_ROOT
+  matlab -r "prepare_cropped_data"
+  ```
+
 #### Running pre-trained hourglass models using pose-hg-demo
 
 0. Download pre-trained hourglass models.
