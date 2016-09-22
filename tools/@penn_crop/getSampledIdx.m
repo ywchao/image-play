@@ -3,7 +3,9 @@ function [ sidx ] = getSampledIdx( obj )
 sidx = [];
 scnt = 0;
 % sidx should not depend on the input seqLength
-tmp = obj.seqLength;
+seqType_ = obj.seqType;
+seqLength_ = obj.seqLength;
+obj.seqType = 'phase';
 obj.seqLength = 16;
 for i = 1:size(obj.ind2sub, 1)
     if obj.ind2sub(i, 2) == 1
@@ -12,15 +14,16 @@ for i = 1:size(obj.ind2sub, 1)
         if strcmp(obj.split,'train') == 1 && mod(scnt, 10) ~= 1
             continue
         end
-        phaseSeq = getPhaseSeq(obj, i);
+        seqIdx = getSeq(obj, i);
         if isempty(sidx)
-            sidx = phaseSeq;
+            sidx = seqIdx;
         else
-            sidx = [sidx phaseSeq];
+            sidx = [sidx seqIdx];
         end
     end
 end
-obj.seqLength = tmp;
+obj.seqType = seqType_;
+obj.seqLength = seqLength_;
 
 end
 

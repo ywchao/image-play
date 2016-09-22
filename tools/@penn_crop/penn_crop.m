@@ -9,6 +9,7 @@ classdef penn_crop
         seqId
         nFrame
         nPhase
+        seqType
         seqLength
         inputRes
         outputRes
@@ -29,6 +30,7 @@ classdef penn_crop
             [obj.seqId, obj.nFrame] = preproAnno(obj);
             % get phase number and LSTM sequence length
             obj.nPhase = opt.nPhase;
+            obj.seqType = opt.seqType;
             obj.seqLength = opt.seqLength;
             % get input and output resolution
             obj.inputRes = opt.inputRes;
@@ -39,19 +41,22 @@ classdef penn_crop
         [seqId, nFrame] = preproAnno(obj);
         
         % get phase sequence in global index (ind2sub)
-        ind = getPhaseSeq(obj, i);
+        [ind, has_flow] = getSeq(obj, i);
         
         % get image path
         pa = imgpath(obj, idx);
-
+        
         % load image
         img = loadImage(obj, idx);
-
+        
+        % get center and scale
+        [center, scale] = getCenterScale(obj, img);
+        
         % get dataset size
         out = size(obj);
-
-        input = get(obj, idx);
-
+        
+        [input, phaseSeq, center, scale] = get(obj, idx);
+        
         [sid, fid] = getSeqFrId(obj, idx);
         
         % get sampled indices; for prediction and visualization
