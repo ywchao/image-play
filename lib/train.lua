@@ -89,36 +89,35 @@ function Trainer:train(epoch, loaders)
   for i, sample in dataloader:run({augment=true}) do
     local dataTime = dataTimer:time().real
   
-    -- Get input and target
+    -- Get input and label
     local input = sample.input[1]
-    local target_ps = sample.target_ps
+    local label = sample.label
 
     -- Convert to CUDA
-    input, target_ps = self:convertCuda(input, target_ps)
+    input, label = self:convertCuda(input, label)
 
     -- Init output
-    local loss_ps = {}
-    local acc_ps = {}
+    local loss, acc = {}, {}
 
     -- Single nngraph model
     if torch.type(self.model) == 'nn.gModule' then
       -- Forward pass
       local output = self.model:forward(input)
-      self.criterion:forward(self.model.output, target_ps)
+      self.criterion:forward(self.model.output, label)
       for j = 1, #output do
         if j <= self.seqlen then
-          loss_ps[j] = self.criterion.criterions[j].output
-          acc_ps[j] = self:computeAccuracy(output[j]:contiguous(), target_ps[j])
+          loss[j] = self.criterion.criterions[j].output
+          acc[j] = self:computeAccuracy(output[j]:contiguous(), label[j])
         else
-          loss_ps[j] = 0
-          acc_ps[j] = 0/0
+          loss[j] = 0
+          acc[j] = 0/0
         end
       end
-      acc_ps = torch.Tensor(acc_ps)
+      acc = torch.Tensor(acc)
 
       -- Backprop
       self.model:zeroGradParameters()
-      self.criterion:backward(self.model.output, target_ps)
+      self.criterion:backward(self.model.output, label)
       self.model:backward(input, self.criterion.gradInput)
 
       -- Optimization
@@ -175,12 +174,12 @@ function Trainer:train(epoch, loaders)
             self.model['rnn'][j+1].modules[v].cellInput = self.model['rnn'][j].modules[v].cellOutput
           end
         end
-        self.criterion:forward(self.model['dec'].output, target_ps[j])
+        self.criterion:forward(self.model['dec'].output, label[j])
 
-        loss_ps[j] = self.criterion.output
-        acc_ps[j] = self:computeAccuracy(output[j]:contiguous(), target_ps[j])
+        loss[j] = self.criterion.output
+        acc[j] = self:computeAccuracy(output[j]:contiguous(), label[j])
 
-        self.criterion:backward(self.model['dec'].output, target_ps[j])
+        self.criterion:backward(self.model['dec'].output, label[j])
         self.model['dec']:backward(out_rnn, self.criterion.gradInput)
         if torch.type(out_rnn) ~= 'table' then
           gradInputDec[j] = self.model['dec'].gradInput[1]:clone()
@@ -191,10 +190,10 @@ function Trainer:train(epoch, loaders)
         end
       end
       for j = self.seqlen+1, self.opt.seqLength do
-        loss_ps[j] = 0
-        acc_ps[j] = 0/0
+        loss[j] = 0
+        acc[j] = 0/0
       end
-      acc_ps = torch.Tensor(acc_ps)
+      acc = torch.Tensor(acc)
 
       -- Backward pass for RNN and encoder
       local gradInputRNNSum
@@ -260,10 +259,10 @@ function Trainer:train(epoch, loaders)
     entry[3] = string.format("%.3f" % time)
     entry[4] = string.format("%.3f" % dataTime)
     for j = 1, self.opt.seqLength do
-      entry[#entry+1] = string.format("%.5f" % loss_ps[j])
+      entry[#entry+1] = string.format("%.5f" % loss[j])
     end
     for j = 1, self.opt.seqLength do
-      entry[#entry+1] = string.format("%.5f" % acc_ps[j])
+      entry[#entry+1] = string.format("%.5f" % acc[j])
     end
     self.logger['train']:add(entry)
   
@@ -299,10 +298,10 @@ function Trainer:test(epoch, iter, loaders, split)
   )
   local dataloader = loaders[split]
   local size = dataloader:size()
-  local lossSum_ps, accSum_ps = {}, {}
+  local lossSum, accSum = {}, {}
   for i = 1, self.opt.seqLength do
-    lossSum_ps[i] = 0.0
-    accSum_ps[i] = 0.0
+    lossSum[i] = 0.0
+    accSum[i] = 0.0
   end
   local N = 0
 
@@ -316,31 +315,31 @@ function Trainer:test(epoch, iter, loaders, split)
 
   self:setModelMode('evaluate')
   for i, sample in dataloader:run() do
-    -- Get input and target
+    -- Get input and label
     local input = sample.input[1]
-    local target_ps = sample.target_ps
+    local label = sample.label
 
     -- Convert to CUDA
-    input, target_ps = self:convertCuda(input, target_ps)
+    input, label = self:convertCuda(input, label)
 
     -- Init output
-    local loss_ps, acc_ps = {}, {}
+    local loss, acc = {}, {}
 
     -- Single nngraph model
     if torch.type(self.model) == 'nn.gModule' then
       -- Forward pass
       local output = self.model:forward(input)
-      self.criterion:forward(self.model.output, target_ps)
+      self.criterion:forward(self.model.output, label)
       for j = 1, #output do
         if j <= self.seqlen then
-          loss_ps[j] = self.criterion.criterions[j].output
-          acc_ps[j] = self:computeAccuracy(output[j]:contiguous(), target_ps[j])
+          loss[j] = self.criterion.criterions[j].output
+          acc[j] = self:computeAccuracy(output[j]:contiguous(), label[j])
         else
-          loss_ps[j] = 0
-          acc_ps[j] = 0/0
+          loss[j] = 0
+          acc[j] = 0/0
         end
       end
-      acc_ps = torch.Tensor(acc_ps)
+      acc = torch.Tensor(acc)
     end
 
     -- Breakdown nngraph model
@@ -384,24 +383,24 @@ function Trainer:test(epoch, iter, loaders, split)
             self.model['rnn'][j+1].modules[v].cellInput = self.model['rnn'][j].modules[v].cellOutput
           end
         end
-        self.criterion:forward(self.model['dec'].output, target_ps[j])
+        self.criterion:forward(self.model['dec'].output, label[j])
 
-        loss_ps[j] = self.criterion.output
-        acc_ps[j] = self:computeAccuracy(output[j]:contiguous(), target_ps[j])
+        loss[j] = self.criterion.output
+        acc[j] = self:computeAccuracy(output[j]:contiguous(), label[j])
       end
       for j = self.seqlen+1, self.opt.seqLength do
-        loss_ps[j] = 0
-        acc_ps[j] = 0/0
+        loss[j] = 0
+        acc[j] = 0/0
       end
-      acc_ps = torch.Tensor(acc_ps)
+      acc = torch.Tensor(acc)
     end
 
     -- Accumulate loss and acc
-    if torch.all(acc_ps:sub(1,self.seqlen):eq(acc_ps:sub(1,self.seqlen))) then
+    if torch.all(acc:sub(1,self.seqlen):eq(acc:sub(1,self.seqlen))) then
       local batchSize = input:size(1)
       for j = 1, self.opt.seqLength do
-        lossSum_ps[j] = lossSum_ps[j] + loss_ps[j]
-        accSum_ps[j] = accSum_ps[j] + acc_ps[j]
+        lossSum[j] = lossSum[j] + loss[j]
+        accSum[j] = accSum[j] + acc[j]
       end
       N = N + batchSize
     end 
@@ -412,8 +411,8 @@ function Trainer:test(epoch, iter, loaders, split)
 
   -- Compute mean loss and accuracy
   for i = 1, self.opt.seqLength do
-    lossSum_ps[i] = lossSum_ps[i] / N
-    accSum_ps[i] = accSum_ps[i] / N
+    lossSum[i] = lossSum[i] / N
+    accSum[i] = accSum[i] / N
   end
 
   -- Print and log
@@ -424,10 +423,10 @@ function Trainer:test(epoch, iter, loaders, split)
   entry[3] = string.format("%.3f" % testTime)
   entry[4] = string.format("%d" % 0/0)
   for j = 1, self.opt.seqLength do
-    entry[#entry+1] = string.format("%.5f" % lossSum_ps[j])
+    entry[#entry+1] = string.format("%.5f" % lossSum[j])
   end
   for j = 1, self.opt.seqLength do
-    entry[#entry+1] = string.format("%.5f" % accSum_ps[j])
+    entry[#entry+1] = string.format("%.5f" % accSum[j])
   end
   self.logger[split]:add(entry)
 end
@@ -442,13 +441,13 @@ function Trainer:predict(loaders, split)
 
   self:setModelMode('evaluate')
   for i, sample in dataloader:run({pred=true,samp=true}) do
-    -- Get input and target
+    -- Get input and label
     local index = sample.index
     local input = sample.input[1]
-    local target_ps = sample.target_ps
+    local label = sample.label
 
     -- Convert to CUDA
-    input, target_ps = self:convertCuda(input, target_ps)
+    input, label = self:convertCuda(input, label)
 
     -- Init output
     local output = {}
@@ -506,14 +505,14 @@ function Trainer:predict(loaders, split)
     if not heatmaps then
       heatmaps = torch.FloatTensor(
           dataloader:sizeSampled(), self.opt.seqLength,
-          target_ps[1]:size(2), self.opt.outputRes, self.opt.outputRes
+          label[1]:size(2), self.opt.outputRes, self.opt.outputRes
       )
     end
     assert(input:size(1) == 1, 'batch size must be 1 with run({pred=true})')
     sidx[i] = index[1]
     for j = 1, #output do
       heatmaps[i][j]:copy(output[j][1])
-      -- heatmaps[i][j]:copy(target_ps[j][1])
+      -- heatmaps[i][j]:copy(label[j][1])
     end
 
     xlua.progress(i, dataloader:sizeSampled())
@@ -582,12 +581,12 @@ function Trainer:setModelMode(mode)
   end
 end
 
-function Trainer:convertCuda(input, target_ps)
+function Trainer:convertCuda(input, label)
   input = input:cuda()
-  for i = 1, #target_ps do
-    target_ps[i] = target_ps[i]:cuda()
+  for i = 1, #label do
+    label[i] = label[i]:cuda()
   end
-  return input, target_ps
+  return input, label
 end
 
 function Trainer:resetRNNStates()

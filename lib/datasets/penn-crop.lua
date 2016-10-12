@@ -100,7 +100,7 @@ end
 function PennCropDataset:get(idx)
   local input = {}
   -- local input
-  local target = {}
+  local label = {}
   local img, center, scale
   local inp, out
 
@@ -115,13 +115,13 @@ function PennCropDataset:get(idx)
     end
     -- Transform image
     inp = crop(img, center, scale, 0, self.inputRes)
-    -- Generate target
+    -- Generate label
     local pts = self.part[sid]
     local vis = self.visible[sid]
     out = torch.zeros(pts:size(1), self.outputRes, self.outputRes)
     for j = 1, pts:size(1) do
       if vis[j] == 1 then
-        drawGaussian(out[j], transform(torch.add(pts[j],1), center, scale, 0, self.outputRes), 2)
+        drawGaussian(out[j], transform(pts[j], center, scale, 0, self.outputRes), 2)
       end
     end
     input[i] = inp
@@ -129,11 +129,11 @@ function PennCropDataset:get(idx)
     -- if i == 1 then
     --   input = torch.Tensor(inp:size()):copy(inp)
     -- end
-    target[i] = out
+    label[i] = out
   end
   return {
     input = input,
-    target = target,
+    label = label,
   }
 end
 

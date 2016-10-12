@@ -8,7 +8,7 @@ fi
 
 CUDA_VISIBLE_DEVICES=$gpu_id th main.lua \
   -expID seq16-hg-256-res-clstm \
-  -nThreads 1 \
+  -nThreads 4 \
   -nEpochs 4 \
   -batchSize 3 \
   -testInt 6600 \

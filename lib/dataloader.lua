@@ -99,27 +99,27 @@ function DataLoader:run(kwargs)
          threads:addjob(
             function(indices)
                -- local input = {}
-               -- local target = {}
+               -- local label = {}
                -- for i, idx in ipairs(indices:totable()) do
                --    sample = _G.dataset:get(idx)
                --    input[i] = sample.input
-               --    target[i] = sample.target
+               --    label[i] = sample.label
                -- end
                -- collectgarbage()
                -- return {
                --    input = input,
-               --    target = target,
+               --    label = label,
                -- }
                local sz = indices:size(1)
                local index = {}
                local input, imageSize
-               local target_ps, targetSizes
+               local label, labelSizes
                for i, idx in ipairs(indices:totable()) do
                   index[i] = idx
                   local sample = _G.dataset:get(idx)
                   -- Augment data
                   if kwargs ~= nil and kwargs.augment == true then
-                     _G.augment.run(sample.input, sample.target, _G.dataset:getMatchedParts())
+                     _G.augment.run(sample.input, sample.label, _G.dataset:getMatchedParts())
                   end
                   if not input then
                      -- imageSize = sample.input:size():totable()
@@ -130,26 +130,26 @@ function DataLoader:run(kwargs)
                         input[j] = torch.FloatTensor(sz, unpack(imageSize))
                      end
                   end
-                  if not target_ps then
-                     targetSize = sample.target[1]:size():totable()
-                     target_ps = {}
-                     for j = 1, #sample.target do
-                        target_ps[j] = torch.FloatTensor(sz, unpack(targetSize))
+                  if not label then
+                     labelSize = sample.label[1]:size():totable()
+                     label = {}
+                     for j = 1, #sample.label do
+                        label[j] = torch.FloatTensor(sz, unpack(labelSize))
                      end
                   end
                   -- input[i]:copy(sample.input)
                   for j = 1, #input do
                      input[j][i] = sample.input[j]
                   end
-                  for j = 1, #target_ps do
-                     target_ps[j][i] = sample.target[j]
+                  for j = 1, #label do
+                     label[j][i] = sample.label[j]
                   end
                end
                collectgarbage()
                return {
                   index = index,
                   input = input,
-                  target_ps = target_ps,
+                  label = label,
                }
             end,
             function(_sample_)

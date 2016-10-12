@@ -8,7 +8,7 @@ fi
 
 CUDA_VISIBLE_DEVICES=$gpu_id th main.lua \
   -expID seq16-hg-256-clstm \
-  -nThreads 1 \
+  -nThreads 4 \
   -nEpochs 4 \
   -netType hg-256-clstm \
   -hgModel pose-hg-train/exp/penn_action_cropped/hg-256-ft/best_model.t7

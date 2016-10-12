@@ -21,8 +21,8 @@ local function shuffleLR(x, matched_parts)
   return x
 end
 
-function M.run(input, target, matched_parts)
-  assert(#input == #target, 'input and target size mismatch')
+function M.run(input, label, matched_parts)
+  assert(#input == #label, 'input and label size mismatch')
 
   -- Color
   local m1 = torch.uniform(0.8, 1.2)
@@ -38,7 +38,7 @@ function M.run(input, target, matched_parts)
   if torch.uniform() <= 0.5 then
     for i = 1, #input do
       input[i] = flip(input[i])
-      target[i] = flip(shuffleLR(target[i], matched_parts))
+      label[i] = flip(shuffleLR(label[i], matched_parts))
     end
   end
 end
