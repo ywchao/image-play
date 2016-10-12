@@ -21,9 +21,8 @@ local function shuffleLR(x, matched_parts)
   return x
 end
 
-function M.run(input, target, matched_parts, flow)
+function M.run(input, target, matched_parts)
   assert(#input == #target, 'input and target size mismatch')
-  assert(#input == #flow, 'input and flow size mismatch')
 
   -- Color
   local m1 = torch.uniform(0.8, 1.2)
@@ -40,8 +39,6 @@ function M.run(input, target, matched_parts, flow)
     for i = 1, #input do
       input[i] = flip(input[i])
       target[i] = flip(shuffleLR(target[i], matched_parts))
-      flow[i] = flip(flow[i])
-      flow[i][1] = flow[i][1]:mul(-1)
     end
   end
 end

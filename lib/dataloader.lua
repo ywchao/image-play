@@ -114,15 +114,13 @@ function DataLoader:run(kwargs)
                local index = {}
                local input, imageSize
                local target_ps, targetSizes
-               local target_im
-               local target_fl
                local epsilon
                for i, idx in ipairs(indices:totable()) do
                   index[i] = idx
                   local sample = _G.dataset:get(idx)
                   -- Augment data
                   if kwargs ~= nil and kwargs.augment == true then
-                     _G.augment.run(sample.input, sample.target, _G.dataset:getMatchedParts(), sample.flow)
+                     _G.augment.run(sample.input, sample.target, _G.dataset:getMatchedParts())
                   end
                   if not input then
                      -- imageSize = sample.input:size():totable()
@@ -136,12 +134,8 @@ function DataLoader:run(kwargs)
                   if not target_ps then
                      targetSize = sample.target[1]:size():totable()
                      target_ps = {}
-                     target_im = {}
-                     target_fl = {}
                      for j = 1, #sample.target do
                         target_ps[j] = torch.FloatTensor(sz, unpack(targetSize))
-                        target_im[j] = torch.FloatTensor(sz, 3, targetSize[2], targetSize[3])
-                        target_fl[j] = torch.FloatTensor(sz, 2, targetSize[2], targetSize[3])
                      end
                   end
                   -- input[i]:copy(sample.input)
@@ -150,8 +144,6 @@ function DataLoader:run(kwargs)
                   end
                   for j = 1, #target_ps do
                      target_ps[j][i] = sample.target[j]
-                     target_im[j][i] = image.scale(sample.input[j],targetSize[3],targetSize[2])
-                     target_fl[j][i] = sample.flow[j]
                   end
                end
                -- Gaussian noise
@@ -167,8 +159,6 @@ function DataLoader:run(kwargs)
                   index = index,
                   input = input,
                   target_ps = target_ps,
-                  target_im = target_im,
-                  target_fl = target_fl,
                   epsilon = epsilon,
                }
             end,

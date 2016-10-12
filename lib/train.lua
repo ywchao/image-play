@@ -20,27 +20,6 @@ function Trainer:__init(model, criterion, opt, optimState)
   -- Single nngraph model
   if torch.type(model) == 'nn.gModule' then
     self.params, self.gradParams = model:getParameters()
-    if #model:findModules('nn.SplitTable') == 2 then
-      local stab_ind = {}
-      for i, m in ipairs(model.modules) do
-        if torch.type(m) == 'nn.SplitTable' then
-          table.insert(stab_ind, i)
-        end
-      end
-      assert(#stab_ind == 2)
-      assert(torch.type(model.modules[stab_ind[1]-2]) == 'cudnn.SpatialConvolution')
-      if model.modules[stab_ind[2]-2].nOutputPlane == 3 then
-        self.predIm = true
-        self.predFl = false
-      end
-      if model.modules[stab_ind[2]-2].nOutputPlane == 2 then
-        self.predIm = false
-        self.predFl = true
-      end
-    else
-      self.predIm = false
-      self.predFl = false
-    end
   end
   -- Breakdown nngraph model
   if torch.type(model) == 'table' then
@@ -56,8 +35,6 @@ function Trainer:__init(model, criterion, opt, optimState)
         table.insert(self.lstm_ind, i)
       end
     end
-    self.predIm = false
-    self.predFl = false
   end
   self.logger = {
     train = Logger(paths.concat(opt.save, 'train.log'), opt.resume),
@@ -78,16 +55,6 @@ function Trainer:initLogger(logger)
   end
   for i = 1, self.opt.seqLength do
     names[#names+1] = 'acc' .. i .. 'p'
-  end
-  if self.predIm and not self.predFl then
-    for i = 1, self.opt.seqLength do
-      names[#names+1] = 'loss' .. i .. 'i'
-    end
-  end
-  if not self.predIm and self.predFl then
-    for i = 1, self.opt.seqLength do
-      names[#names+1] = 'loss' .. i .. 'f'
-    end
   end
   if self.model['res'] and self.model['vae'] then
     for i = 1, self.opt.seqLength do
@@ -130,79 +97,34 @@ function Trainer:train(epoch, loaders)
     -- Get input and target
     local input = sample.input[1]
     local target_ps = sample.target_ps
-    local target_im = sample.target_im
-    local target_fl = sample.target_fl
     local epsilon = sample.epsilon
 
     -- Convert to CUDA
-    input, target_ps, target_im, target_fl, epsilon =
-        self:convertCuda(input, target_ps, target_im, target_fl, epsilon)
+    input, target_ps, epsilon = self:convertCuda(input, target_ps, epsilon)
 
     -- Init output
-    local loss_ps, loss_im, loss_fl, loss_z = {}, {}, {}, {}
+    local loss_ps, loss_z = {}, {}
     local acc_ps = {}
 
     -- Single nngraph model
     if torch.type(self.model) == 'nn.gModule' then
       -- Forward pass
       local output = self.model:forward(input)
-      if self.predIm and not self.predFl then
-        self.criterion:forward(self.model.output, {target_ps, target_im})
-        for j = 1, #output[1] do
-          if j <= self.seqlen then
-            loss_ps[j] = self.criterion.criterions[1].criterions[j].output
-            loss_im[j] = self.criterion.criterions[2].criterions[j].output
-            acc_ps[j] = self:computeAccuracy(output[1][j]:contiguous(), target_ps[j])
-          else
-            loss_ps[j] = 0
-            loss_im[j] = 0
-            acc_ps[j] = 0/0
-          end
-          loss_fl[j] = 0/0
-        end
-      end
-      if not self.predIm and self.predFl then
-        self.criterion:forward(self.model.output, {target_ps, target_fl})
-        for j = 1, #output[1] do
-          if j <= self.seqlen then
-            loss_ps[j] = self.criterion.criterions[1].criterions[j].output
-            loss_fl[j] = self.criterion.criterions[2].criterions[j].output
-            acc_ps[j] = self:computeAccuracy(output[1][j]:contiguous(), target_ps[j])
-          else
-            loss_ps[j] = 0
-            loss_fl[j] = 0
-            acc_ps[j] = 0/0
-          end
-          loss_im[j] = 0/0
-        end
-      end
-      if not self.predIm and not self.predFl then
-        self.criterion:forward(self.model.output, target_ps)
-        for j = 1, #output do
-          if j <= self.seqlen then
-            loss_ps[j] = self.criterion.criterions[j].output
-            acc_ps[j] = self:computeAccuracy(output[j]:contiguous(), target_ps[j])
-          else
-            loss_ps[j] = 0
-            acc_ps[j] = 0/0
-          end
-          loss_im[j] = 0/0
-          loss_fl[j] = 0/0
+      self.criterion:forward(self.model.output, target_ps)
+      for j = 1, #output do
+        if j <= self.seqlen then
+          loss_ps[j] = self.criterion.criterions[j].output
+          acc_ps[j] = self:computeAccuracy(output[j]:contiguous(), target_ps[j])
+        else
+          loss_ps[j] = 0
+          acc_ps[j] = 0/0
         end
       end
       acc_ps = torch.Tensor(acc_ps)
 
       -- Backprop
       self.model:zeroGradParameters()
-      if self.predIm and not self.predFl then
-        self.criterion:backward(self.model.output, {target_ps, target_im})
-      end
-      if not self.predIm and self.predFl then
-        self.criterion:backward(self.model.output, {target_ps, target_fl})
-      end
-      if not self.predIm and not self.predFl then
-        self.criterion:backward(self.model.output, target_ps)
-      end
+      self.criterion:backward(self.model.output, target_ps)
       self.model:backward(input, self.criterion.gradInput)
 
       -- Optimization
@@ -281,8 +203,6 @@ function Trainer:train(epoch, loaders)
 
         loss_ps[j] = self.criterion.output
         acc_ps[j] = self:computeAccuracy(output[j]:contiguous(), target_ps[j])
-        loss_im[j] = 0/0
-        loss_fl[j] = 0/0
         if self.model['res'] and self.model['vae'] then
           loss_z[j] = torch.mean(out_rnn[#out_enc*2+1])
         else
@@ -305,8 +225,6 @@ function Trainer:train(epoch, loaders)
       for j = self.seqlen+1, self.opt.seqLength do
         loss_ps[j] = 0
         acc_ps[j] = 0/0
-        loss_im[j] = 0/0
-        loss_fl[j] = 0/0
         loss_z[j] = 0/0
       end
       acc_ps = torch.Tensor(acc_ps)
@@ -402,16 +320,6 @@ function Trainer:train(epoch, loaders)
     for j = 1, self.opt.seqLength do
       entry[#entry+1] = string.format("%.5f" % acc_ps[j])
     end
-    if self.predIm and not self.predFl then
-      for j = 1, self.opt.seqLength do
-        entry[#entry+1] = string.format("%.5f" % loss_im[j])
-      end
-    end
-    if not self.predIm and self.predFl then
-      for j = 1, self.opt.seqLength do
-        entry[#entry+1] = string.format("%.5f" % loss_fl[j])
-      end
-    end
     if self.model['res'] and self.model['vae'] then
       for j = 1, self.opt.seqLength do
         entry[#entry+1] = string.format("%.8f" % loss_z[j])
@@ -451,11 +359,9 @@ function Trainer:test(epoch, iter, loaders, split)
   )
   local dataloader = loaders[split]
   local size = dataloader:size()
-  local lossSum_ps, lossSum_im, lossSum_fl, accSum_ps, lossSum_z = {}, {}, {}, {}, {}
+  local lossSum_ps, accSum_ps, lossSum_z = {}, {}, {}
   for i = 1, self.opt.seqLength do
     lossSum_ps[i] = 0.0
-    lossSum_im[i] = 0.0
-    lossSum_fl[i] = 0.0
     lossSum_z[i] = 0.0
     accSum_ps[i] = 0.0
   end
@@ -474,64 +380,27 @@ function Trainer:test(epoch, iter, loaders, split)
     -- Get input and target
     local input = sample.input[1]
     local target_ps = sample.target_ps
-    local target_im = sample.target_im
-    local target_fl = sample.target_fl
     local epsilon = sample.epsilon
 
     -- Convert to CUDA
-    input, target_ps, target_im, target_fl, epsilon =
-        self:convertCuda(input, target_ps, target_im, target_fl, epsilon)
+    input, target_ps, epsilon = self:convertCuda(input, target_ps, epsilon)
 
     -- Init output
-    local loss_ps, loss_im, loss_fl, loss_z = {}, {}, {}, {}
+    local loss_ps, loss_z = {}, {}
     local acc_ps = {}
 
     -- Single nngraph model
     if torch.type(self.model) == 'nn.gModule' then
       -- Forward pass
       local output = self.model:forward(input)
-      if self.predIm and not self.predFl then
-        self.criterion:forward(self.model.output, {target_ps, target_im})
-        for j = 1, #output[1] do
-          if j <= self.seqlen then
-            loss_ps[j] = self.criterion.criterions[1].criterions[j].output
-            loss_im[j] = self.criterion.criterions[2].criterions[j].output
-            acc_ps[j] = self:computeAccuracy(output[1][j]:contiguous(), target_ps[j])
-          else
-            loss_ps[j] = 0
-            loss_im[j] = 0
-            acc_ps[j] = 0/0
-          end
-          loss_fl[j] = 0/0
-        end
-      end
-      if not self.predIm and self.predFl then
-        self.criterion:forward(self.model.output, {target_ps, target_fl})
-        for j = 1, #output[1] do
-          if j <= self.seqlen then
-            loss_ps[j] = self.criterion.criterions[1].criterions[j].output
-            loss_fl[j] = self.criterion.criterions[2].criterions[j].output
-            acc_ps[j] = self:computeAccuracy(output[1][j]:contiguous(), target_ps[j])
-          else
-            loss_ps[j] = 0
-            loss_fl[j] = 0
-            acc_ps[j] = 0/0
-          end
-          loss_im[j] = 0/0
-        end
-      end
-      if not self.predIm and not self.predFl then
-        self.criterion:forward(self.model.output, target_ps)
-        for j = 1, #output do
-          if j <= self.seqlen then
-            loss_ps[j] = self.criterion.criterions[j].output
-            acc_ps[j] = self:computeAccuracy(output[j]:contiguous(), target_ps[j])
-          else
-            loss_ps[j] = 0
-            acc_ps[j] = 0/0
-          end
-          loss_im[j] = 0/0
-          loss_fl[j] = 0/0
+      self.criterion:forward(self.model.output, target_ps)
+      for j = 1, #output do
+        if j <= self.seqlen then
+          loss_ps[j] = self.criterion.criterions[j].output
+          acc_ps[j] = self:computeAccuracy(output[j]:contiguous(), target_ps[j])
+        else
+          loss_ps[j] = 0
+          acc_ps[j] = 0/0
         end
       end
       acc_ps = torch.Tensor(acc_ps)
@@ -600,8 +469,6 @@ function Trainer:test(epoch, iter, loaders, split)
 
         loss_ps[j] = self.criterion.output
         acc_ps[j] = self:computeAccuracy(output[j]:contiguous(), target_ps[j])
-        loss_im[j] = 0/0
-        loss_fl[j] = 0/0
         if self.model['res'] and self.model['vae'] then
           loss_z[j] = torch.mean(out_rnn[#out_enc*2+1])
         else
@@ -611,8 +478,6 @@ function Trainer:test(epoch, iter, loaders, split)
       for j = self.seqlen+1, self.opt.seqLength do
         loss_ps[j] = 0
         acc_ps[j] = 0/0
-        loss_im[j] = 0/0
-        loss_fl[j] = 0/0
         loss_z[j] = 0/0
       end
       acc_ps = torch.Tensor(acc_ps)
@@ -623,8 +488,6 @@ function Trainer:test(epoch, iter, loaders, split)
       local batchSize = input:size(1)
       for j = 1, self.opt.seqLength do
         lossSum_ps[j] = lossSum_ps[j] + loss_ps[j]
-        lossSum_im[j] = lossSum_im[j] + loss_im[j]
-        lossSum_fl[j] = lossSum_fl[j] + loss_fl[j]
         lossSum_z[j] = lossSum_z[j] + loss_z[j]
         accSum_ps[j] = accSum_ps[j] + acc_ps[j]
       end
@@ -638,8 +501,6 @@ function Trainer:test(epoch, iter, loaders, split)
   -- Compute mean loss and accuracy
   for i = 1, self.opt.seqLength do
     lossSum_ps[i] = lossSum_ps[i] / N
-    lossSum_im[i] = lossSum_im[i] / N
-    lossSum_fl[i] = lossSum_fl[i] / N
     lossSum_z[i] = lossSum_z[i] / N
     accSum_ps[i] = accSum_ps[i] / N
   end
@@ -657,16 +518,6 @@ function Trainer:test(epoch, iter, loaders, split)
   for j = 1, self.opt.seqLength do
     entry[#entry+1] = string.format("%.5f" % accSum_ps[j])
   end
-  if self.predIm and not self.predFl then
-    for j = 1, self.opt.seqLength do
-      entry[#entry+1] = string.format("%.5f" % lossSum_im[j])
-    end
-  end
-  if not self.predIm and self.predFl then
-    for j = 1, self.opt.seqLength do
-      entry[#entry+1] = string.format("%.5f" % lossSum_fl[j])
-    end
-  end
   if self.model['res'] and self.model['vae'] then
     for j = 1, self.opt.seqLength do
       entry[#entry+1] = string.format("%.8f" % lossSum_z[j])
@@ -678,7 +529,7 @@ end
 function Trainer:predict(loaders, split)
   local dataloader = loaders[split]
   local sidx = torch.LongTensor(dataloader:sizeSampled())
-  local heatmaps, images, gtimages, flows, gtflows
+  local heatmaps
 
   print("=> Generating predictions ...")
   xlua.progress(0, dataloader:sizeSampled())
@@ -689,13 +540,10 @@ function Trainer:predict(loaders, split)
     local index = sample.index
     local input = sample.input[1]
     local target_ps = sample.target_ps
-    local target_im = sample.target_im
-    local target_fl = sample.target_fl
     local epsilon = sample.epsilon
 
     -- Convert to CUDA
-    input, target_ps, target_im, target_fl, epsilon =
-        self:convertCuda(input, target_ps, target_im, target_fl, epsilon)
+    input, target_ps, epsilon = self:convertCuda(input, target_ps, epsilon)
 
     -- Init output
     local output = {}
@@ -773,52 +621,12 @@ function Trainer:predict(loaders, split)
           dataloader:sizeSampled(), self.opt.seqLength,
           target_ps[1]:size(2), self.opt.outputRes, self.opt.outputRes
       )
-      if self.predIm and not self.predFl then
-        images = torch.FloatTensor(
-          dataloader:sizeSampled(), self.opt.seqLength,
-          3, self.opt.outputRes, self.opt.outputRes
-        )
-        gtimages = torch.FloatTensor(
-          dataloader:sizeSampled(), self.opt.seqLength,
-          3, self.opt.outputRes, self.opt.outputRes
-        )
-      end
-      if not self.predIm and self.predFl then
-        flows = torch.FloatTensor(
-          dataloader:sizeSampled(), self.opt.seqLength,
-          2, self.opt.outputRes, self.opt.outputRes
-        )
-        gtflows = torch.FloatTensor(
-          dataloader:sizeSampled(), self.opt.seqLength,
-          2, self.opt.outputRes, self.opt.outputRes
-        )
-      end
     end
     assert(input:size(1) == 1, 'batch size must be 1 with run({pred=true})')
     sidx[i] = index[1]
-    if self.predIm and not self.predFl then
-      for j = 1, #output[1] do
-        heatmaps[i][j]:copy(output[1][j][1])
-        -- heatmaps[i][j]:copy(target_ps[2][j][1])
-        -- Get image and target_im
-        images[i][j]:copy(output[2][j][1])
-        gtimages[i][j]:copy(target_im[j][1])
-      end
-    end
-    if not self.predIm and self.predFl then
-      for j = 1, #output[1] do
-        heatmaps[i][j]:copy(output[1][j][1])
-        -- heatmaps[i][j]:copy(target_ps[2][j][1])
-        -- Get flow and target_fl
-        flows[i][j]:copy(output[2][j][1])
-        gtflows[i][j]:copy(target_fl[j][1])
-      end
-    end
-    if not self.predIm and not self.predFl then
-      for j = 1, #output do
-        heatmaps[i][j]:copy(output[j][1])
-        -- heatmaps[i][j]:copy(target_ps[j][1])
-      end
+    for j = 1, #output do
+      heatmaps[i][j]:copy(output[j][1])
+      -- heatmaps[i][j]:copy(target_ps[j][1])
     end
 
     xlua.progress(i, dataloader:sizeSampled())
@@ -828,36 +636,12 @@ function Trainer:predict(loaders, split)
   -- Sort heatmaps by index
   local sidx, i = torch.sort(sidx)
   heatmaps = heatmaps:index(1, i)
-  if self.predIm and not self.predFl then
-    images = images:index(1, i)
-    gtimages = gtimages:index(1, i)
-  end
-  if not self.predIm and self.predFl then
-    flows = flows:index(1, i)
-    gtflows = gtflows:index(1, i)
-  end
 
   -- Save final predictions
   local f = hdf5.open(self.opt.save .. '/preds_' .. split .. '.h5', 'w')
   -- local f = hdf5.open(self.opt.save .. '/gt_' .. split .. '.h5', 'w')
   f:write('heatmaps', heatmaps)
   f:close()
-
-  -- Save image separately
-  if self.predIm and not self.predFl then
-    local f = hdf5.open(self.opt.save .. '/images_' .. split .. '.h5', 'w')
-    f:write('images', images)
-    f:write('gtimages', gtimages)
-    f:close()
-  end
-
-  -- Save flow separately
-  if not self.predIm and self.predFl then
-    local f = hdf5.open(self.opt.save .. '/flows_' .. split .. '.h5', 'w')
-    f:write('flows', flows)
-    f:write('gtflows', gtflows)
-    f:close()
-  end
 end
 
 function Trainer:setSeqLenCritWeight(epoch)
@@ -868,23 +652,11 @@ function Trainer:setSeqLenCritWeight(epoch)
   seqlen = math.min(seqlen, self.opt.seqLength)
   -- Single nngraph model
   if torch.type(self.model) == 'nn.gModule' then
-    if self.predIm or self.predFl then
-      for i = 1, #self.criterion.criterions[1].weights do
-        if i <= seqlen then
-          self.criterion.criterions[1].weights[i] = 1
-          self.criterion.criterions[2].weights[i] = 1
-        else
-          self.criterion.criterions[1].weights[i] = 0
-          self.criterion.criterions[2].weights[i] = 0
-        end
-      end
-    else
-      for i = 1, #self.criterion.weights do
-        if i <= seqlen then
-          self.criterion.weights[i] = 1
-        else
-          self.criterion.weights[i] = 0
-        end
+    for i = 1, #self.criterion.weights do
+      if i <= seqlen then
+        self.criterion.weights[i] = 1
+      else
+        self.criterion.weights[i] = 0
       end
     end
   end
@@ -923,19 +695,17 @@ function Trainer:setModelMode(mode)
   end
 end
 
-function Trainer:convertCuda(input, target_ps, target_im, target_fl, epsilon)
+function Trainer:convertCuda(input, target_ps, epsilon)
   input = input:cuda()
   for i = 1, #target_ps do
     target_ps[i] = target_ps[i]:cuda()
-    target_im[i] = target_im[i]:cuda()
-    target_fl[i] = target_fl[i]:cuda()
   end
   for i = 1, #epsilon do
     for j = 1, #epsilon[i] do
       epsilon[i][j] = epsilon[i][j]:cuda()
     end
   end
-  return input, target_ps, target_im, target_fl, epsilon
+  return input, target_ps, epsilon
 end
 
 function Trainer:resetRNNStates()

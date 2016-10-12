@@ -2,7 +2,6 @@ require 'hdf5'
 require 'image'
 require 'common/util'
 require 'lib/util/img'
-require 'lib/util/flo'
 
 local M = {}
 local PennCropDataset = torch.class('image-play.PennCropDataset', M)
@@ -65,16 +64,11 @@ function PennCropDataset:_getSeq(i)
   rep_ind = self.ind2sub:index(1,ind:long())[{{},1}]:ne(id)
   rep_val = torch.max(ind[rep_ind:eq(0)])
   ind[rep_ind] = rep_val
-  -- has_flow
-  has_flow = torch.ByteTensor(ind:numel())
-  has_flow:sub(1,has_flow:numel()-1):copy(ind:sub(1,ind:numel()-1):ne(ind:sub(2,ind:numel())))
-  has_flow[has_flow:numel()] = 0
   -- Drop frames over LSTM sequence length
   if self.seqType == 'phase' and ind:size(1) ~= self.seqLength then
     ind = ind[{{1, self.seqLength}}]
-    has_flow = has_flow[{{1, self.seqLength}}]
   end
-  return ind, has_flow
+  return ind
 end
 
 -- Get image path
@@ -98,29 +92,6 @@ function PennCropDataset:_getCenterScale(img)
   return {torch.Tensor({x,y}), scale}
 end
 
--- Get flow path
-function PennCropDataset:_flowpath(idx, i)
-  if self.seqType == 'phase' then
-    return string.format('%04d/%03d/flownets-pred-%07d.flo',self.ind2sub[idx][1],self.ind2sub[idx][2],i-1)
-  end
-  if self.seqType == 'raw' then
-    local seqIdx = self:_getSeq(idx)
-    local sid = seqIdx[i]
-    return string.format('%04d/flownets-pred-%07d.flo',self.ind2sub[sid][1],self.ind2sub[sid][2]-1)
-  end
-end
-
--- Load flow
-function PennCropDataset:_loadFlow(idx, i)
-  if self.opt.seqType == 'phase' then
-    assert(self.nPhase == 16)
-    return readFlowFile(paths.concat('flownet-release/models/flownet/res_penn-crop/',self:_flowpath(idx,i)))
-  end
-  if self.opt.seqType == 'raw' then
-    return readFlowFile(paths.concat('flownet-release/models/flownet/res_penn-crop_noskip/',self:_flowpath(idx,i)))
-  end
-end
-
 -- Get dataset size
 function PennCropDataset:size()
   return self.ind2sub:size(1)
@@ -130,11 +101,10 @@ function PennCropDataset:get(idx)
   local input = {}
   -- local input
   local target = {}
-  local flow = {}
-  local img, center, scale, fl
-  local inp, out, out_fl
+  local img, center, scale
+  local inp, out
 
-  local seqIdx, hasFlow = self:_getSeq(idx)
+  local seqIdx = self:_getSeq(idx)
   for i = 1, seqIdx:numel() do
     sid = seqIdx[i]
     -- Load image
@@ -154,30 +124,16 @@ function PennCropDataset:get(idx)
         drawGaussian(out[j], transform(torch.add(pts[j],1), center, scale, 0, self.outputRes), 2)
       end
     end
-    -- Load and transform flow
-    if hasFlow[i] == 0 then
-      out_fl = torch.zeros(2, self.outputRes, self.outputRes)
-      -- out_fl = torch.randn(2, self.outputRes, self.outputRes):mul(0.25)
-    else
-      fl = self:_loadFlow(idx, i)
-      fl = fl:permute(3,1,2)
-      out_fl = crop(fl, center, scale, 0, self.outputRes)
-      -- Need to adjust vector magnitude according to the resizing factor
-      local rfactor = self.outputRes / (200 * scale)
-      out_fl = out_fl:mul(rfactor)
-    end
     input[i] = inp
     -- We only need the first frame for input
     -- if i == 1 then
     --   input = torch.Tensor(inp:size()):copy(inp)
     -- end
     target[i] = out
-    flow[i] = out_fl
   end
   return {
     input = input,
     target = target,
-    flow = flow,
   }
 end
 

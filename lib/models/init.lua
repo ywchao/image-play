@@ -64,38 +64,13 @@ function M.setup(opt, checkpoint)
   -- Detect image prediction by checking the number of nn.SplitTable
   local criterion
   if torch.type(model) == 'nn.gModule' then
-    if #model:findModules('nn.SplitTable') == 1 then
-      -- Pose prediction only
-      criterion = nn.ParallelCriterion()
-      for i = 1, opt.seqLength do
-        criterion:add(nn.MSECriterion())
-      end
-    end
-    if #model:findModules('nn.SplitTable') == 2 then
-      -- Pose and image prediction
-      criterion = nn.ParallelCriterion()
-      criterion:add(nn.ParallelCriterion())
-      criterion:add(nn.ParallelCriterion())
-      for i = 1, opt.seqLength do
-        criterion.criterions[1]:add(nn.MSECriterion())
-      end
-      for i = 1, opt.seqLength do
-        criterion.criterions[2]:add(nn.MSECriterion())
-      end
+    criterion = nn.ParallelCriterion()
+    for i = 1, opt.seqLength do
+      criterion:add(nn.MSECriterion())
     end
   end
   if torch.type(model) == 'table' then
     criterion = nn.MSECriterion()
-    -- if #model.outnode.data.mapindex == 1 then
-    --   -- Pose prediction only
-    --   criterion = nn.MSECriterion()
-    -- end
-    -- if #model.outnode.data.mapindex == 2 then
-    --   -- Pose and image prediction
-    --   criterion = nn.ParallelCriterion()
-    --   criterion:add(nn.MSECriterion())
-    --   criterion:add(nn.MSECriterion())
-    -- end
   end
 
   -- Convert to CUDA
