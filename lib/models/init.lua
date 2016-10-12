@@ -84,16 +84,8 @@ function M.setup(opt, checkpoint)
     -- Check if model is residual type
     if #model['rnn_one']:findModules('nn.CAddTable') == 0 then
       model['res'] = false
-      model['vae'] = false
     else
       model['res'] = true
-      -- Check if model contains VAE
-      if model['rnn_one'].nInputs == #model['rnn_one'].outnode.data.mapindex * 2 then
-        model['vae'] = false
-      end
-      if model['rnn_one'].nInputs == (#model['rnn_one'].outnode.data.mapindex-1) * (3/2) then
-        model['vae'] = true
-      end
     end
   end
   criterion:cuda()

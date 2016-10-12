@@ -56,11 +56,6 @@ function Trainer:initLogger(logger)
   for i = 1, self.opt.seqLength do
     names[#names+1] = 'acc' .. i .. 'p'
   end
-  if self.model['res'] and self.model['vae'] then
-    for i = 1, self.opt.seqLength do
-      names[#names+1] = 'loss' .. i .. 'z'
-    end
-  end
   logger:setNames(names)
 end
 
@@ -97,13 +92,12 @@ function Trainer:train(epoch, loaders)
     -- Get input and target
     local input = sample.input[1]
     local target_ps = sample.target_ps
-    local epsilon = sample.epsilon
 
     -- Convert to CUDA
-    input, target_ps, epsilon = self:convertCuda(input, target_ps, epsilon)
+    input, target_ps = self:convertCuda(input, target_ps)
 
     -- Init output
-    local loss_ps, loss_z = {}, {}
+    local loss_ps = {}
     local acc_ps = {}
 
     -- Single nngraph model
@@ -143,7 +137,7 @@ function Trainer:train(epoch, loaders)
 
       --- Forward pass and decoder backward pass
       local output = {}
-      local out_enc, out_rnn, inp_zero, inp_rnn, inp_dec
+      local out_enc, out_rnn, inp_zero, inp_rnn
       local gradInputDec = {}
       for j = 1, self.seqlen do
         gradInputDec[j] = {}
@@ -156,9 +150,6 @@ function Trainer:train(epoch, loaders)
           end
           if self.model['res'] then
             inp_rnn = append(out_enc, out_enc)
-            if self.model['vae'] then
-              inp_rnn = append(inp_rnn, epsilon[j])
-            end
             out_rnn = self.model['rnn'][j]:forward(inp_rnn)
           else
             out_rnn = self.model['rnn'][j]:forward(out_enc)
@@ -172,30 +163,15 @@ function Trainer:train(epoch, loaders)
           end
           if self.model['res'] then
             inp_rnn = append(out_enc, inp_zero)
-            if self.model['vae'] then
-              inp_rnn = append(inp_rnn, epsilon[j])
-            end
             out_rnn = self.model['rnn'][j]:forward(inp_rnn)
           else
             out_rnn = self.model['rnn'][j]:forward(inp_zero)
           end
         end
-        if self.model['res'] and self.model['vae'] then
-          inp_dec = slice(out_rnn, #out_enc)
-        else
-          inp_dec = out_rnn
-        end
-        if #inp_dec == 1 then
-          inp_dec = inp_dec[1]
-        end
-        output[j] = self.model['dec']:forward(inp_dec):clone()
+        output[j] = self.model['dec']:forward(out_rnn):clone()
         if j < self.seqlen then
-          for k, v in ipairs(self.lstm_ind) do
-            if self.model['res'] and self.model['vae'] then
-              self.model['rnn'][j+1].modules[v].hiddenInput = out_rnn[#out_enc+k]
-            else
-              self.model['rnn'][j+1].modules[v].hiddenInput = self.model['rnn'][j].modules[v].hiddenOutput
-            end
+          for _, v in ipairs(self.lstm_ind) do
+            self.model['rnn'][j+1].modules[v].hiddenInput = self.model['rnn'][j].modules[v].hiddenOutput
             self.model['rnn'][j+1].modules[v].cellInput = self.model['rnn'][j].modules[v].cellOutput
           end
         end
@@ -203,17 +179,9 @@ function Trainer:train(epoch, loaders)
 
         loss_ps[j] = self.criterion.output
         acc_ps[j] = self:computeAccuracy(output[j]:contiguous(), target_ps[j])
-        if self.model['res'] and self.model['vae'] then
-          loss_z[j] = torch.mean(out_rnn[#out_enc*2+1])
-        else
-          loss_z[j] = 0/0
-        end
 
         self.criterion:backward(self.model['dec'].output, target_ps[j])
         self.model['dec']:backward(out_rnn, self.criterion.gradInput)
-        if torch.type(self.model['dec'].gradInput) ~= 'table' then
-          self.model['dec'].gradInput = {self.model['dec'].gradInput}
-        end
         if torch.type(out_rnn) ~= 'table' then
           gradInputDec[j] = self.model['dec'].gradInput[1]:clone()
         else
@@ -225,36 +193,17 @@ function Trainer:train(epoch, loaders)
       for j = self.seqlen+1, self.opt.seqLength do
         loss_ps[j] = 0
         acc_ps[j] = 0/0
-        loss_z[j] = 0/0
       end
       acc_ps = torch.Tensor(acc_ps)
 
       -- Backward pass for RNN and encoder
-      local gradInputRNNSum, gradInputZ, gradInputLossZ
-      if self.model['res'] and self.model['vae'] then
-        gradInputZ, gradInputLossZ = {}, {}
-        for j = 1, #out_enc do
-          gradInputZ[j] = torch.zeros(out_rnn[#out_enc+j]:size()):cuda()
-        end
-        local batchSize = out_rnn[#out_enc*2+1]:numel()
-        gradInputLossZ[1] = torch.ones(batchSize):div(batchSize):cuda()
-      end
+      local gradInputRNNSum
       for j = self.seqlen, 1, -1 do
         if self.model['res'] then
           if j == 1 then
             inp_rnn = append(out_enc, out_enc)
-            if self.model['res'] and self.model['vae'] then
-              inp_rnn = append(inp_rnn, epsilon[j])
-            end
           else
             inp_rnn = append(out_enc, inp_zero)
-            if self.model['res'] and self.model['vae'] then
-              inp_rnn = append(inp_rnn, epsilon[j])
-            end
-          end
-          if self.model['res'] and self.model['vae'] then
-            gradInputDec[j] = append(gradInputDec[j], gradInputZ)
-            gradInputDec[j] = append(gradInputDec[j], gradInputLossZ)
           end
           self.model['rnn'][j]:backward(inp_rnn, gradInputDec[j])
           if j == self.seqlen then
@@ -282,12 +231,8 @@ function Trainer:train(epoch, loaders)
           end
         end
         if j ~= 1 then
-          for k, v in ipairs(self.lstm_ind) do
-            if self.model['res'] and self.model['vae'] then
-              gradInputZ[k] = self.model['rnn'][j].modules[v].gradHiddenInput
-            else
-              self.model['rnn'][j-1].modules[v].gradHiddenOutput = self.model['rnn'][j].modules[v].gradHiddenInput
-            end
+          for _, v in ipairs(self.lstm_ind) do
+            self.model['rnn'][j-1].modules[v].gradHiddenOutput = self.model['rnn'][j].modules[v].gradHiddenInput
             self.model['rnn'][j-1].modules[v].gradCellOutput = self.model['rnn'][j].modules[v].gradCellInput
           end
         end
@@ -319,11 +264,6 @@ function Trainer:train(epoch, loaders)
     end
     for j = 1, self.opt.seqLength do
       entry[#entry+1] = string.format("%.5f" % acc_ps[j])
-    end
-    if self.model['res'] and self.model['vae'] then
-      for j = 1, self.opt.seqLength do
-        entry[#entry+1] = string.format("%.8f" % loss_z[j])
-      end
     end
     self.logger['train']:add(entry)
   
@@ -359,10 +299,9 @@ function Trainer:test(epoch, iter, loaders, split)
   )
   local dataloader = loaders[split]
   local size = dataloader:size()
-  local lossSum_ps, accSum_ps, lossSum_z = {}, {}, {}
+  local lossSum_ps, accSum_ps = {}, {}
   for i = 1, self.opt.seqLength do
     lossSum_ps[i] = 0.0
-    lossSum_z[i] = 0.0
     accSum_ps[i] = 0.0
   end
   local N = 0
@@ -380,14 +319,12 @@ function Trainer:test(epoch, iter, loaders, split)
     -- Get input and target
     local input = sample.input[1]
     local target_ps = sample.target_ps
-    local epsilon = sample.epsilon
 
     -- Convert to CUDA
-    input, target_ps, epsilon = self:convertCuda(input, target_ps, epsilon)
+    input, target_ps = self:convertCuda(input, target_ps)
 
     -- Init output
-    local loss_ps, loss_z = {}, {}
-    local acc_ps = {}
+    local loss_ps, acc_ps = {}, {}
 
     -- Single nngraph model
     if torch.type(self.model) == 'nn.gModule' then
@@ -413,7 +350,7 @@ function Trainer:test(epoch, iter, loaders, split)
 
       -- Forward pass
       local output = {}
-      local out_enc, out_rnn, inp_zero, inp_rnn, inp_dec
+      local out_enc, out_rnn, inp_zero, inp_rnn
       for j = 1, self.seqlen do
         if j == 1 then
           out_enc = self.model['enc']:forward(input)
@@ -422,9 +359,6 @@ function Trainer:test(epoch, iter, loaders, split)
           end
           if self.model['res'] then
             inp_rnn = append(out_enc, out_enc)
-            if self.model['vae'] then
-              inp_rnn = append(inp_rnn, epsilon[j])
-            end
             out_rnn = self.model['rnn'][j]:forward(inp_rnn)
           else
             out_rnn = self.model['rnn'][j]:forward(out_enc)
@@ -438,30 +372,15 @@ function Trainer:test(epoch, iter, loaders, split)
           end
           if self.model['res'] then
             inp_rnn = append(out_enc, inp_zero)
-            if self.model['vae'] then
-              inp_rnn = append(inp_rnn, epsilon[j])
-            end
             out_rnn = self.model['rnn'][j]:forward(inp_rnn)
           else
             out_rnn = self.model['rnn'][j]:forward(inp_zero)
           end
         end
-        if self.model['res'] and self.model['vae'] then
-          inp_dec = slice(out_rnn, #out_enc)
-        else
-          inp_dec = out_rnn
-        end
-        if #inp_dec == 1 then
-          inp_dec = inp_dec[1]
-        end
-        output[j] = self.model['dec']:forward(inp_dec):clone()
+        output[j] = self.model['dec']:forward(out_rnn):clone()
         if j < self.seqlen then
-          for k, v in ipairs(self.lstm_ind) do
-            if self.model['res'] and self.model['vae'] then
-              self.model['rnn'][j+1].modules[v].hiddenInput = out_rnn[#out_enc+k]
-            else
-              self.model['rnn'][j+1].modules[v].hiddenInput = self.model['rnn'][j].modules[v].hiddenOutput
-            end
+          for _, v in ipairs(self.lstm_ind) do
+            self.model['rnn'][j+1].modules[v].hiddenInput = self.model['rnn'][j].modules[v].hiddenOutput
             self.model['rnn'][j+1].modules[v].cellInput = self.model['rnn'][j].modules[v].cellOutput
           end
         end
@@ -469,16 +388,10 @@ function Trainer:test(epoch, iter, loaders, split)
 
         loss_ps[j] = self.criterion.output
         acc_ps[j] = self:computeAccuracy(output[j]:contiguous(), target_ps[j])
-        if self.model['res'] and self.model['vae'] then
-          loss_z[j] = torch.mean(out_rnn[#out_enc*2+1])
-        else
-          loss_z[j] = 0/0
-        end
       end
       for j = self.seqlen+1, self.opt.seqLength do
         loss_ps[j] = 0
         acc_ps[j] = 0/0
-        loss_z[j] = 0/0
       end
       acc_ps = torch.Tensor(acc_ps)
     end
@@ -488,7 +401,6 @@ function Trainer:test(epoch, iter, loaders, split)
       local batchSize = input:size(1)
       for j = 1, self.opt.seqLength do
         lossSum_ps[j] = lossSum_ps[j] + loss_ps[j]
-        lossSum_z[j] = lossSum_z[j] + loss_z[j]
         accSum_ps[j] = accSum_ps[j] + acc_ps[j]
       end
       N = N + batchSize
@@ -501,7 +413,6 @@ function Trainer:test(epoch, iter, loaders, split)
   -- Compute mean loss and accuracy
   for i = 1, self.opt.seqLength do
     lossSum_ps[i] = lossSum_ps[i] / N
-    lossSum_z[i] = lossSum_z[i] / N
     accSum_ps[i] = accSum_ps[i] / N
   end
 
@@ -517,11 +428,6 @@ function Trainer:test(epoch, iter, loaders, split)
   end
   for j = 1, self.opt.seqLength do
     entry[#entry+1] = string.format("%.5f" % accSum_ps[j])
-  end
-  if self.model['res'] and self.model['vae'] then
-    for j = 1, self.opt.seqLength do
-      entry[#entry+1] = string.format("%.8f" % lossSum_z[j])
-    end
   end
   self.logger[split]:add(entry)
 end
@@ -540,10 +446,9 @@ function Trainer:predict(loaders, split)
     local index = sample.index
     local input = sample.input[1]
     local target_ps = sample.target_ps
-    local epsilon = sample.epsilon
 
     -- Convert to CUDA
-    input, target_ps, epsilon = self:convertCuda(input, target_ps, epsilon)
+    input, target_ps = self:convertCuda(input, target_ps)
 
     -- Init output
     local output = {}
@@ -560,7 +465,7 @@ function Trainer:predict(loaders, split)
       self:resetRNNStates()
 
       -- Forward pass
-      local out_enc, out_rnn, inp_zero, inp_rnn, inp_dec
+      local out_enc, out_rnn, inp_zero, inp_rnn
       for j = 1, self.opt.seqLength do
         if j == 1 then
           out_enc = self.model['enc']:forward(input)
@@ -569,9 +474,6 @@ function Trainer:predict(loaders, split)
           end
           if self.model['res'] then
             inp_rnn = append(out_enc, out_enc)
-            if self.model['vae'] then
-              inp_rnn = append(inp_rnn, epsilon[j])
-            end
             out_rnn = self.model['rnn'][j]:forward(inp_rnn)
           else
             out_rnn = self.model['rnn'][j]:forward(out_enc)
@@ -585,30 +487,15 @@ function Trainer:predict(loaders, split)
           end
           if self.model['res'] then
             inp_rnn = append(out_enc, inp_zero)
-            if self.model['vae'] then
-              inp_rnn = append(inp_rnn, epsilon[j])
-            end
             out_rnn = self.model['rnn'][j]:forward(inp_rnn)
           else
             out_rnn = self.model['rnn'][j]:forward(inp_zero)
           end
         end
-        if self.model['res'] and self.model['vae'] then
-          inp_dec = slice(out_rnn, #out_enc)
-        else
-          inp_dec = out_rnn
-        end
-        if #inp_dec == 1 then
-          inp_dec = inp_dec[1]
-        end
-        output[j] = self.model['dec']:forward(inp_dec):clone()
+        output[j] = self.model['dec']:forward(out_rnn):clone()
         if j < self.opt.seqLength then
-          for k, v in ipairs(self.lstm_ind) do
-            if self.model['res'] and self.model['vae'] then
-              self.model['rnn'][j+1].modules[v].hiddenInput = out_rnn[#out_enc+k]
-            else
-              self.model['rnn'][j+1].modules[v].hiddenInput = self.model['rnn'][j].modules[v].hiddenOutput
-            end
+          for _, v in ipairs(self.lstm_ind) do
+            self.model['rnn'][j+1].modules[v].hiddenInput = self.model['rnn'][j].modules[v].hiddenOutput
             self.model['rnn'][j+1].modules[v].cellInput = self.model['rnn'][j].modules[v].cellOutput
           end
         end
@@ -695,17 +582,12 @@ function Trainer:setModelMode(mode)
   end
 end
 
-function Trainer:convertCuda(input, target_ps, epsilon)
+function Trainer:convertCuda(input, target_ps)
   input = input:cuda()
   for i = 1, #target_ps do
     target_ps[i] = target_ps[i]:cuda()
   end
-  for i = 1, #epsilon do
-    for j = 1, #epsilon[i] do
-      epsilon[i][j] = epsilon[i][j]:cuda()
-    end
-  end
-  return input, target_ps, epsilon
+  return input, target_ps
 end
 
 function Trainer:resetRNNStates()

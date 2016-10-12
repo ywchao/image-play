@@ -114,7 +114,6 @@ function DataLoader:run(kwargs)
                local index = {}
                local input, imageSize
                local target_ps, targetSizes
-               local epsilon
                for i, idx in ipairs(indices:totable()) do
                   index[i] = idx
                   local sample = _G.dataset:get(idx)
@@ -146,20 +145,11 @@ function DataLoader:run(kwargs)
                      target_ps[j][i] = sample.target[j]
                   end
                end
-               -- Gaussian noise
-               local epsilon = {}
-               for j = 1, #input do
-                  epsilon[j] = {}
-                  for k = 1, _G.dataset.opt.numScales do
-                     epsilon[j][k] = torch.randn(input[j]:size(1), _G.dataset.opt.hiddenSize):float()
-                  end
-               end
                collectgarbage()
                return {
                   index = index,
                   input = input,
                   target_ps = target_ps,
-                  epsilon = epsilon,
                }
             end,
             function(_sample_)
