@@ -1,4 +1,5 @@
 require 'nngraph'
+require 'cudnn'
 
 local M = {}
 

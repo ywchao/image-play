@@ -1,6 +1,4 @@
 require 'cutorch'
-require 'cudnn'
-require 'hdf5'
 
 local DataLoader = require 'lib/dataloader'
 local models = require 'lib/models/init'
@@ -19,7 +17,6 @@ torch.manualSeed(opt.manualSeed)
 cutorch.manualSeedAll(opt.manualSeed)
 
 -- Create model
-nnlib = cudnn
 local model, criterion = models.setup(opt, checkpoint)
 
 -- Data loading

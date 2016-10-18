@@ -22,23 +22,25 @@ function DataLoader.create(opt)
    for i, split in ipairs{'train', 'val', 'test'} do
       -- local dataset = Dataset(opt, split)
       -- loaders[split] = M.DataLoader(dataset, opt, split)
-      loaders[split] = M.DataLoader(opt, split)
+      -- loaders[split] = M.DataLoader(opt, split)
+      local Dataset = require('lib/datasets/' .. opt.dataset)
+      local dataset = Dataset(opt, split)
+      loaders[split] = M.DataLoader(dataset, opt, split)
    end
 
    -- return table.unpack(loaders)
    return loaders
 end
 
--- function DataLoader:__init(dataset, opt, split)
-function DataLoader:__init(opt, split)
+function DataLoader:__init(dataset, opt, split)
+-- function DataLoader:__init(opt, split)
    local manualSeed = opt.manualSeed
    local function init()
       -- require('lib/datasets/' .. opt.dataset)
       -- We should have initialize dataset in creat(). This is currently not
       -- possible since the used hdf5 library will throw errors if we do that.
       local Dataset = require('lib/datasets/' .. opt.dataset)
-      dataset = Dataset(opt, split)
-      augment = require('lib/augment')
+      -- dataset = Dataset(opt, split)
    end
    local function main(idx)
       -- This matters due to the thread-dependent randomness from data
@@ -48,7 +50,6 @@ function DataLoader:__init(opt, split)
       end
       torch.setnumthreads(1)
       _G.dataset = dataset
-      _G.augment = augment
       return dataset:size(), dataset:getSampledIdx()
    end
 
@@ -56,11 +57,7 @@ function DataLoader:__init(opt, split)
    self.threads = threads
    self.__size = outputs[1][1]
    self.sidx = outputs[1][2]
-   if split == 'train' then
-     self.batchSize = opt.batchSize
-   else
-     self.batchSize = 1
-   end
+   self.batchSize = opt.batchSize
 end
 
 function DataLoader:size()
@@ -79,14 +76,15 @@ function DataLoader:run(kwargs)
    local threads = self.threads
    local size, batchSize = self.__size, self.batchSize
    local perm
-   if kwargs ~= nil and kwargs.pred == true then
+   assert(kwargs ~= nil and kwargs.train ~= nil)
+   if kwargs.train == true then
+      perm = torch.randperm(size)
+   else
       batchSize = 1
       perm = torch.range(1, size)
-   else
-      perm = torch.randperm(size)
    end
-   if kwargs ~= nil and kwargs.samp == true then
-      assert(kwargs.pred == true, 'kwargs error: require pred == true if samp == true')
+   if kwargs.samp == true then
+      assert(kwargs.train == false, 'kwargs error: require train == false if samp == true')
       batchSize = 1
       perm = self.sidx
       size = self.sidx:numel()
@@ -98,32 +96,12 @@ function DataLoader:run(kwargs)
          local indices = perm:narrow(1, idx, math.min(batchSize, size - idx + 1))
          threads:addjob(
             function(indices)
-               -- local input = {}
-               -- local label = {}
-               -- for i, idx in ipairs(indices:totable()) do
-               --    sample = _G.dataset:get(idx)
-               --    input[i] = sample.input
-               --    label[i] = sample.label
-               -- end
-               -- collectgarbage()
-               -- return {
-               --    input = input,
-               --    label = label,
-               -- }
                local sz = indices:size(1)
-               local index = {}
                local input, imageSize
                local label, labelSizes
                for i, idx in ipairs(indices:totable()) do
-                  index[i] = idx
-                  local sample = _G.dataset:get(idx)
-                  -- Augment data
-                  if kwargs ~= nil and kwargs.augment == true then
-                     _G.augment.run(sample.input, sample.label, _G.dataset:getMatchedParts())
-                  end
+                  local sample = _G.dataset:get(idx, kwargs.train)
                   if not input then
-                     -- imageSize = sample.input:size():totable()
-                     -- input = torch.FloatTensor(sz, unpack(imageSize))
                      imageSize = sample.input[1]:size():totable()
                      input = {}
                      for j = 1, #sample.input do
@@ -137,7 +115,6 @@ function DataLoader:run(kwargs)
                         label[j] = torch.FloatTensor(sz, unpack(labelSize))
                      end
                   end
-                  -- input[i]:copy(sample.input)
                   for j = 1, #input do
                      input[j][i] = sample.input[j]
                   end
@@ -147,7 +124,7 @@ function DataLoader:run(kwargs)
                end
                collectgarbage()
                return {
-                  index = index,
+                  index = indices:int(),
                   input = input,
                   label = label,
                }

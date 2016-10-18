@@ -38,7 +38,9 @@ function getTransform(center, scale, rot, res)
     return t
 end
 
-function transform(pt, center, scale, rot, res, invert)
+-- function transform(pt, center, scale, rot, res, invert)
+-- function transform(pt, center, scale, rot, res, invert, int)
+function transform(pt, center, scale, rot, res, invert, round)
     local pt_ = torch.ones(3)
     pt_[1],pt_[2] = pt[1]-1,pt[2]-1
 
@@ -48,7 +50,15 @@ function transform(pt, center, scale, rot, res, invert)
     end
     local new_point = (t*pt_):sub(1,2):add(1e-4)
 
-    return new_point:int():add(1)
+    -- return new_point:int():add(1)
+    -- if int == nil or int == true then
+    --     new_point = new_point:int()
+    -- end
+    -- return new_point:add(1)
+    if round == nil or round == true then
+        new_point = new_point:round()
+    end
+    return new_point:add(1)
 end
 
 -------------------------------------------------------------------------------
@@ -185,8 +195,23 @@ end
 -- Flipping functions
 -------------------------------------------------------------------------------
 
+function shuffleLR(x, dataset)
+    assert(x:dim() == 4 or x:dim() == 3, 'dim must be 4 or 3')
+    local dim = x:dim() - 2
+    local matchedParts
+    if dataset == 'penn-crop' then
+      matchedParts = {{ 2, 3}, { 4, 5}, { 6, 7}, { 8, 9}, {10,11}, {12,13}}
+    end
+    local y = x:clone()
+    for i = 1, #matchedParts do
+        local idx1, idx2 = unpack(matchedParts[i])
+        y:narrow(dim, idx1, 1):copy(x:narrow(dim, idx2, 1))
+        y:narrow(dim, idx2, 1):copy(x:narrow(dim, idx1, 1))
+    end
+    return y
+end
+
 function flip(x)
-    require 'image'
     local y = torch.FloatTensor(x:size())
     for i = 1, x:size(1) do
         image.hflip(y[i], x[i]:float())

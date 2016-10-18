@@ -1,6 +1,6 @@
-local conv = nnlib.SpatialConvolution
+local conv = cudnn.SpatialConvolution
 local batchnorm = nn.SpatialBatchNormalization
-local relu = nnlib.ReLU
+local relu = cudnn.ReLU
 
 -- Main convolutional block
 local function convBlock(numIn,numOut)

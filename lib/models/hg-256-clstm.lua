@@ -32,7 +32,7 @@ local function hourglass(n, f, inp)
   local up1 = clstm(up1,f,2^(n+2))
 
   -- Lower branch
-  local low1 = nnlib.SpatialMaxPooling(2,2,2,2)(inp)
+  local low1 = cudnn.SpatialMaxPooling(2,2,2,2)(inp)
   local low2 = Residual(f,f)(low1)
   local low3
 
@@ -50,8 +50,8 @@ end
 
 local function lin(numIn,numOut,inp)
   -- Apply 1x1 convolution, no stride, no padding
-  local l = nnlib.SpatialConvolution(numIn,numOut,1,1,1,1,0,0)(inp)
-  return nnlib.ReLU(true)(nn.SpatialBatchNormalization(numOut)(l))
+  local l = cudnn.SpatialConvolution(numIn,numOut,1,1,1,1,0,0)(inp)
+  return cudnn.ReLU(true)(nn.SpatialBatchNormalization(numOut)(l))
 end
 
 local function tieWeightBiasOneModule(module1, module2)
@@ -98,19 +98,14 @@ function M.createModel(opt, outputDim)
   numLayers = opt.numLayers
   outputRes = opt.outputRes
 
-  -- Get input dim
-  local Dataset = require('lib/datasets/' .. opt.dataset)
-  local dataset = Dataset(opt, 'train')
-  local outputDim = dataset.part:size(2)
-
   -- Input
   local inp = nn.Identity()()
 
   -- Initial processing of the image
-  local cnv1_ = nnlib.SpatialConvolution(3,64,7,7,2,2,3,3)(inp)
-  local cnv1 = nnlib.ReLU(true)(nn.SpatialBatchNormalization(64)(cnv1_))
+  local cnv1_ = cudnn.SpatialConvolution(3,64,7,7,2,2,3,3)(inp)
+  local cnv1 = cudnn.ReLU(true)(nn.SpatialBatchNormalization(64)(cnv1_))
   local r1 = Residual(64,128)(cnv1)
-  local pool = nnlib.SpatialMaxPooling(2,2,2,2)(r1)
+  local pool = cudnn.SpatialMaxPooling(2,2,2,2)(r1)
   local r4 = Residual(128,128)(pool)
   local r5 = Residual(128,256)(r4)
 
@@ -121,7 +116,7 @@ function M.createModel(opt, outputDim)
   local ll = lin(256,256,hg)
 
   -- Output heatmaps
-  local out1 = nnlib.SpatialConvolution(256,outputDim,1,1,1,1,0,0)(ll)
+  local out1 = cudnn.SpatialConvolution(256,outputDim,1,1,1,1,0,0)(ll)
 
   -- Split output in batch dimension;
   local out2 = nn.View(-1,seqLength,outputDim,outputRes,outputRes)(out1)

@@ -34,7 +34,7 @@ local function hourglass(n, numIn, numOut, inp)
   local up4 = Residual(256,numOut)(uph)
 
   -- Lower branch
-  local pool = nnlib.SpatialMaxPooling(2,2,2,2)(inp)
+  local pool = cudnn.SpatialMaxPooling(2,2,2,2)(inp)
   local low1 = Residual(numIn,256)(pool)
   local low2 = Residual(256,256)(low1)
   local low5 = Residual(256,256)(low2)
@@ -54,8 +54,8 @@ end
 
 local function lin(numIn,numOut,inp)
   -- Apply 1x1 convolution, no stride, no padding
-  local l_ = nnlib.SpatialConvolution(numIn,numOut,1,1,1,1,0,0)(inp)
-  return nnlib.ReLU(true)(nn.SpatialBatchNormalization(numOut)(l_))
+  local l_ = cudnn.SpatialConvolution(numIn,numOut,1,1,1,1,0,0)(inp)
+  return cudnn.ReLU(true)(nn.SpatialBatchNormalization(numOut)(l_))
 end
 
 local function tieWeightBiasOneModule(module1, module2)
@@ -102,19 +102,14 @@ function M.createModel(opt, outputDim)
   numLayers = opt.numLayers
   outputRes = opt.outputRes
 
-  -- Get input dim
-  local Dataset = require('lib/datasets/' .. opt.dataset)
-  local dataset = Dataset(opt, 'train')
-  local outputDim = dataset.part:size(2)
-
   -- Input
   local inp = nn.Identity()()
 
   -- Initial processing of the image
-  local cnv1_ = nnlib.SpatialConvolution(3,64,7,7,2,2,3,3)(inp)
-  local cnv1 = nnlib.ReLU(true)(nn.SpatialBatchNormalization(64)(cnv1_))
+  local cnv1_ = cudnn.SpatialConvolution(3,64,7,7,2,2,3,3)(inp)
+  local cnv1 = cudnn.ReLU(true)(nn.SpatialBatchNormalization(64)(cnv1_))
   local r1 = Residual(64,128)(cnv1)
-  local pool = nnlib.SpatialMaxPooling(2,2,2,2)(r1)
+  local pool = cudnn.SpatialMaxPooling(2,2,2,2)(r1)
   local r4 = Residual(128,128)(pool)
   local r5 = Residual(128,128)(r4)
   local r6 = Residual(128,256)(r5)
@@ -127,7 +122,7 @@ function M.createModel(opt, outputDim)
   local l2 = lin(512,512,l1)
 
   -- Output heatmaps
-  local out1 = nnlib.SpatialConvolution(512,outputDim,1,1,1,1,0,0)(l2)
+  local out1 = cudnn.SpatialConvolution(512,outputDim,1,1,1,1,0,0)(l2)
 
   -- Split output in batch dimension;
   local out2 = nn.View(-1,seqLength,outputDim,outputRes,outputRes)(out1)

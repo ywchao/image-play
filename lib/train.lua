@@ -86,7 +86,7 @@ function Trainer:train(epoch, loaders)
 
   -- Set the batch norm to training mode
   self:setModelMode('training')
-  for i, sample in dataloader:run({augment=true}) do
+  for i, sample in dataloader:run({train=true}) do
     local dataTime = dataTimer:time().real
   
     -- Get input and label
@@ -314,7 +314,7 @@ function Trainer:test(epoch, iter, loaders, split)
   xlua.progress(0, size)
 
   self:setModelMode('evaluate')
-  for i, sample in dataloader:run() do
+  for i, sample in dataloader:run({train=false}) do
     -- Get input and label
     local input = sample.input[1]
     local label = sample.label
@@ -440,7 +440,7 @@ function Trainer:predict(loaders, split)
   xlua.progress(0, dataloader:sizeSampled())
 
   self:setModelMode('evaluate')
-  for i, sample in dataloader:run({pred=true,samp=true}) do
+  for i, sample in dataloader:run({train=false,samp=true}) do
     -- Get input and label
     local index = sample.index
     local input = sample.input[1]

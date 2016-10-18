@@ -101,7 +101,7 @@ function M.run(loaders, split, opt, seqlen)
   print("=> Visualizing predictions ...")
   xlua.progress(0, dataloader:sizeSampled())
 
-  for i, sample in dataloader:run({pred=true,samp=true}) do
+  for i, sample in dataloader:run({train=false,samp=true}) do
     -- Get index and input
     local index = sample.index
     local input = sample.input

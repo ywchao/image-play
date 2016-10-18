@@ -7,7 +7,6 @@ local M = {}
 local PennCropDataset = torch.class('image-play.PennCropDataset', M)
 
 function PennCropDataset:__init(opt, split)
-  self.opt = opt
   self.split = split
   self.dir = paths.concat(opt.data, 'frames')
   assert(paths.dirp(self.dir), 'directory does not exist: ' .. self.dir)
@@ -50,6 +49,7 @@ function PennCropDataset:_getSeq(i)
     ind = torch.linspace(i, i+nFrame-1, self.nPhase)
     ind = torch.round(ind)
     assert(ind:numel() == self.nPhase)
+    ind = ind[{{1, self.seqLength}}]
   end
   if self.seqType == 'raw' then
     ind = torch.range(i,i+self.seqLength-1)
@@ -64,10 +64,6 @@ function PennCropDataset:_getSeq(i)
   rep_ind = self.ind2sub:index(1,ind:long())[{{},1}]:ne(id)
   rep_val = torch.max(ind[rep_ind:eq(0)])
   ind[rep_ind] = rep_val
-  -- Drop frames over LSTM sequence length
-  if self.seqType == 'phase' and ind:size(1) ~= self.seqLength then
-    ind = ind[{{1, self.seqLength}}]
-  end
   return ind
 end
 
@@ -89,6 +85,9 @@ function PennCropDataset:_getCenterScale(img)
   local x = (w+1)/2
   local y = (h+1)/2
   local scale = math.max(w,h)/200
+  -- Small adjustment so cropping is less likely to take feet out
+  y = y + scale * 15
+  scale = scale * 1.25
   return {torch.Tensor({x,y}), scale}
 end
 
@@ -97,9 +96,8 @@ function PennCropDataset:size()
   return self.ind2sub:size(1)
 end
 
-function PennCropDataset:get(idx)
+function PennCropDataset:get(idx, train)
   local input = {}
-  -- local input
   local label = {}
   local img, center, scale
   local inp, out
@@ -125,11 +123,26 @@ function PennCropDataset:get(idx)
       end
     end
     input[i] = inp
-    -- We only need the first frame for input
-    -- if i == 1 then
-    --   input = torch.Tensor(inp:size()):copy(inp)
-    -- end
     label[i] = out
+  end
+  -- Augment data
+  if train then
+    -- Color
+    local m1 = torch.uniform(0.8, 1.2)
+    local m2 = torch.uniform(0.8, 1.2)
+    local m3 = torch.uniform(0.8, 1.2)
+    for i = 1, #input do
+      input[i][{1, {}, {}}]:mul(m1):clamp(0, 1)
+      input[i][{2, {}, {}}]:mul(m2):clamp(0, 1)
+      input[i][{3, {}, {}}]:mul(m3):clamp(0, 1)
+    end
+    -- Flip
+    if torch.uniform() <= 0.5 then
+      for i = 1, #input do
+        input[i] = flip(input[i])
+        label[i] = flip(shuffleLR(label[i], 'penn-crop'))
+      end
+    end
   end
   return {
     input = input,
@@ -139,11 +152,6 @@ end
 
 function PennCropDataset:getSeqFrId(idx)
   return self.ind2sub[idx][1], self.ind2sub[idx][2]
-end
-
--- Get matched parts; for data augmentation
-function PennCropDataset:getMatchedParts()
-  return {{2,3},{4,5},{6,7},{8,9},{10,11},{12,13}}
 end
 
 -- Get sampled indices; for prediction and visualization
