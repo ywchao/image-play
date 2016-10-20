@@ -107,7 +107,7 @@ function Trainer:train(epoch, loaders)
       for j = 1, #output do
         if j <= self.seqlen then
           loss[j] = self.criterion.criterions[j].output
-          acc[j] = self:computeAccuracy(output[j]:contiguous(), label[j])
+          acc[j] = self:computeAccuracy(output[j]:contiguous(), label[j]:float())
         else
           loss[j] = 0
           acc[j] = 0/0
@@ -177,7 +177,7 @@ function Trainer:train(epoch, loaders)
         self.criterion:forward(self.model['dec'].output, label[j])
 
         loss[j] = self.criterion.output
-        acc[j] = self:computeAccuracy(output[j]:contiguous(), label[j])
+        acc[j] = self:computeAccuracy(output[j]:contiguous(), label[j]:float())
 
         self.criterion:backward(self.model['dec'].output, label[j])
         self.model['dec']:backward(out_rnn, self.criterion.gradInput)
@@ -333,7 +333,7 @@ function Trainer:test(epoch, iter, loaders, split)
       for j = 1, #output do
         if j <= self.seqlen then
           loss[j] = self.criterion.criterions[j].output
-          acc[j] = self:computeAccuracy(output[j]:contiguous(), label[j])
+          acc[j] = self:computeAccuracy(output[j]:contiguous(), label[j]:float())
         else
           loss[j] = 0
           acc[j] = 0/0
@@ -386,7 +386,7 @@ function Trainer:test(epoch, iter, loaders, split)
         self.criterion:forward(self.model['dec'].output, label[j])
 
         loss[j] = self.criterion.output
-        acc[j] = self:computeAccuracy(output[j]:contiguous(), label[j])
+        acc[j] = self:computeAccuracy(output[j]:contiguous(), label[j]:float())
       end
       for j = self.seqlen+1, self.opt.seqLength do
         loss[j] = 0
