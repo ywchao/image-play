@@ -297,7 +297,7 @@ function Trainer:test(epoch, iter, loaders, split)
       'messed up'
   )
   local dataloader = loaders[split]
-  local size = dataloader:size()
+  local size = dataloader:sizeDataset()
   local lossSum, accSum = {}, {}
   for i = 1, self.opt.seqLength do
     lossSum[i] = 0.0
