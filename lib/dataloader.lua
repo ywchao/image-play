@@ -98,35 +98,48 @@ function DataLoader:run(kwargs)
             function(indices)
                local sz = indices:size(1)
                local input, imageSize
-               local label, labelSizes
+               local repos, reposSize
+               local trans, transSize
+               local focal
+               local hmap, hmapSize
+               local proj, projSize
                for i, idx in ipairs(indices:totable()) do
                   local sample = _G.dataset:get(idx, kwargs.train)
                   if not input then
                      imageSize = sample.input[1]:size():totable()
-                     input = {}
+                     reposSize = sample.repos[1]:size():totable()
+                     transSize = sample.trans[1]:size():totable()
+                     focalSize = sample.focal[1]:size():totable()
+                     hmapSize = sample.hmap[1]:size():totable()
+                     projSize = sample.proj[1]:size():totable()
+                     input, repos, trans, focal, hmap, proj = {}, {}, {}, {}, {}, {}
                      for j = 1, #sample.input do
                         input[j] = torch.FloatTensor(sz, unpack(imageSize))
-                     end
-                  end
-                  if not label then
-                     labelSize = sample.label[1]:size():totable()
-                     label = {}
-                     for j = 1, #sample.label do
-                        label[j] = torch.FloatTensor(sz, unpack(labelSize))
+                        repos[j] = torch.FloatTensor(sz, unpack(reposSize))
+                        trans[j] = torch.FloatTensor(sz, unpack(transSize))
+                        focal[j] = torch.FloatTensor(sz, unpack(focalSize))
+                        hmap[j] = torch.FloatTensor(sz, unpack(hmapSize))
+                        proj[j] = torch.FloatTensor(sz, unpack(projSize))
                      end
                   end
                   for j = 1, #input do
                      input[j][i] = sample.input[j]
-                  end
-                  for j = 1, #label do
-                     label[j][i] = sample.label[j]
+                     repos[j][i] = sample.repos[j]
+                     trans[j][i] = sample.trans[j]
+                     focal[j][i] = sample.focal[j]
+                     hmap[j][i] = sample.hmap[j]
+                     proj[j][i] = sample.proj[j]
                   end
                end
                collectgarbage()
                return {
                   index = indices:int(),
                   input = input,
-                  label = label,
+                  repos = repos,
+                  trans = trans,
+                  focal = focal,
+                  hmap = hmap,
+                  proj = proj,
                }
             end,
             function(_sample_)

@@ -50,14 +50,38 @@ function heatmapAccuracy(output, label, thr, idxs, outputRes)
     if not idxs then
         for i = 1,dists:size(1) do
             acc[i+1] = distAccuracy(dists[i])
-    	    if acc[i+1] >= 0 then avgAcc = avgAcc + acc[i+1]
+            if acc[i+1] >= 0 then avgAcc = avgAcc + acc[i+1]
             else badIdxCount = badIdxCount + 1 end
         end
         acc[1] = avgAcc / (dists:size(1) - badIdxCount)
     else
         for i = 1,#idxs do
             acc[i+1] = distAccuracy(dists[idxs[i]])
-	    if acc[i+1] >= 0 then avgAcc = avgAcc + acc[i+1]
+            if acc[i+1] >= 0 then avgAcc = avgAcc + acc[i+1]
+            else badIdxCount = badIdxCount + 1 end
+        end
+        acc[1] = avgAcc / (#idxs - badIdxCount)
+    end
+    return unpack(acc)
+end
+
+function coordAccuracy(output, label, thr, idxs, outputRes)
+    local dists = calcDists(output, label, torch.ones(output:size(1))*outputRes/10)
+    local acc = {}
+    local avgAcc = 0.0
+    local badIdxCount = 0
+
+    if not idxs then
+        for i = 1,dists:size(1) do
+            acc[i+1] = distAccuracy(dists[i])
+            if acc[i+1] >= 0 then avgAcc = avgAcc + acc[i+1]
+            else badIdxCount = badIdxCount + 1 end
+        end
+        acc[1] = avgAcc / (dists:size(1) - badIdxCount)
+    else
+        for i = 1,#idxs do
+            acc[i+1] = distAccuracy(dists[idxs[i]])
+            if acc[i+1] >= 0 then avgAcc = avgAcc + acc[i+1]
             else badIdxCount = badIdxCount + 1 end
         end
         acc[1] = avgAcc / (#idxs - badIdxCount)

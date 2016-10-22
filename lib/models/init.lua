@@ -38,11 +38,10 @@ function M.setup(opt, checkpoint)
     end
   
     -- Load hourglass
-    local model_hg
     if opt.hgModel ~= 'none' then
       assert(paths.filep(opt.hgModel),
           'initial hourglass model not found: ' .. opt.hgModel)
-      model_hg = torch.load(opt.hgModel)
+      local model_hg = torch.load(opt.hgModel)
   
       local lstm_nodes = model_hg:findModules('cudnn.LSTM')
       if #lstm_nodes == 1 then
@@ -59,15 +58,32 @@ function M.setup(opt, checkpoint)
         error('initial hourglass model error')
       end
     end
+    if opt.s3Model ~= 'none' then
+      assert(paths.filep(opt.s3Model),
+          'initial skel3dnet model not found: ' .. opt.s3Model)
+      local model_s3 = torch.load(opt.s3Model)
+      Model.loadSkel3DNet(model, model_s3)
+    end
   end
 
   -- Create criterion
-  -- Detect image prediction by checking the number of nn.SplitTable
   local criterion
+  local nOutput = #model.outnode.children
   if torch.type(model) == 'nn.gModule' then
+    assert(nOutput == 1 or nOutput == 5)
     criterion = nn.ParallelCriterion()
-    for i = 1, opt.seqLength do
-      criterion:add(nn.MSECriterion())
+    if nOutput == 1 then
+      for i = 1, opt.seqLength do
+        criterion:add(nn.MSECriterion())
+      end
+    end
+    if nOutput == 5 then
+      for i = 1, nOutput do
+        criterion:add(nn.ParallelCriterion())
+        for j = 1, opt.seqLength do
+          criterion.criterions[i]:add(nn.MSECriterion())
+        end
+      end
     end
   end
   if torch.type(model) == 'table' then

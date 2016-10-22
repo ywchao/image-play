@@ -3,6 +3,8 @@ require 'common/util'
 require 'lib/util/img'
 require 'lib/util/eval'
 
+local matio = require 'matio'
+
 M = {}
 
 local function drawSkeleton(input, hms, coords, dataset)
@@ -89,14 +91,6 @@ function M.run(loaders, split, opt, seqlen)
 
   local dataloader = loaders[split]
   local vis_root = paths.concat(opt.save, 'preds_' .. split .. '_vis')
-  -- local vis_root = paths.concat(opt.save, 'gt_' .. split .. '_vis')
-
-  -- Load final predictions
-  local f = hdf5.open(opt.save .. '/preds_' .. split .. '.h5', 'r')
-  -- local f = hdf5.open(opt.save .. '/gt_' .. split .. '.h5', 'r')
-  local heatmaps = f:read('heatmaps'):all()
-  assert(heatmaps:size(1) == loaders[split]:sizeSampled())
-  assert(heatmaps:size(2) == opt.seqLength)
 
   print("=> Visualizing predictions ...")
   xlua.progress(0, dataloader:sizeSampled())
@@ -111,6 +105,12 @@ function M.run(loaders, split, opt, seqlen)
     -- need customization for different datasets later
     local sid, fid = dataset:getSeqFrId(sidx[i])
 
+    -- Load predictions
+    local pred_path = paths.concat(opt.save,'pred_' .. split)
+    local pred_file = paths.concat(pred_path, string.format("%05d.mat" % index[1]))
+    local pred = matio.load(pred_file)
+    assert(pred.hmap:size(1) == opt.seqLength)
+
     local vis_dir = paths.concat(vis_root, ('%04d'):format(sid))
     makedir(vis_dir)
 
@@ -123,12 +123,11 @@ function M.run(loaders, split, opt, seqlen)
 
       -- Use first frame as background
       local inp = input[1][1]
-      -- local inp = input[j][1]
 
       -- Get heatmap
       local idx = find(sidx, index[1])
       assert(idx:numel() == 1, 'index not found')
-      local hm = heatmaps[idx[1]][j]:clone()
+      local hm = pred.hmap[j]:clone()
       hm[hm:lt(0)] = 0
 
       -- Get predictions

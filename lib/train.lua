@@ -3,7 +3,9 @@ require 'cudnn'
 require 'optim'
 require 'lib/util/eval'
 require 'lib/util/Logger'
+require 'common/util'
 
+local matio = require 'matio'
 local model_utils = require 'lib/util/model_utils'
 
 local M = {}
@@ -42,6 +44,7 @@ function Trainer:__init(model, criterion, opt, optimState)
   }
   self:initLogger(self.logger['train'])
   self:initLogger(self.logger['val'])
+  self.nOutput = #self.model.outnode.children
 end
 
 function Trainer:initLogger(logger)
@@ -52,6 +55,9 @@ function Trainer:initLogger(logger)
   names[4] = 'datTime'
   for i = 1, self.opt.seqLength do
     names[#names+1] = 'loss' .. i .. 'p'
+  end
+  for i = 1, self.opt.seqLength do
+    names[#names+1] = 'err' .. i .. 'p'
   end
   for i = 1, self.opt.seqLength do
     names[#names+1] = 'acc' .. i .. 'p'
@@ -68,7 +74,7 @@ function Trainer:train(epoch, loaders)
   end
 
   -- Set criterion weight for curriculum learning
-  self:setSeqLenCritWeight(epoch)
+  self:setSeqLenCritWeight(self.opt.currBase, epoch)
 
   local dataloader = loaders['train']
   local size = dataloader:size()
@@ -89,39 +95,71 @@ function Trainer:train(epoch, loaders)
   for i, sample in dataloader:run({train=true}) do
     local dataTime = dataTimer:time().real
   
-    -- Get input and label
-    local input = sample.input[1]
-    local label = sample.label
+    -- Get input/output and convert to CUDA
+    local input = sample.input[1]:cuda()
+    local repos, trans, focal, hmap, proj = {}, {}, {}, {}, {}
+    for j = 1, #sample.input do
+      repos[j] = sample.repos[j]:cuda()
+      trans[j] = sample.trans[j]:cuda()
+      focal[j] = sample.focal[j]:cuda()
+      hmap[j] = sample.hmap[j]:cuda()
+      proj[j] = sample.proj[j]:cuda()
+    end
 
-    -- Convert to CUDA
-    input, label = self:convertCuda(input, label)
+    -- Get target
+    local target
+    if self.nOutput == 1 then target = hmap end
 
     -- Init output
-    local loss, acc = {}, {}
+    local loss, err, acc = {}, {}, {}
 
     -- Single nngraph model
     if torch.type(self.model) == 'nn.gModule' then
       -- Forward pass
       local output = self.model:forward(input)
-      self.criterion:forward(self.model.output, label)
-      for j = 1, #output do
-        if j <= self.seqlen then
-          loss[j] = self.criterion.criterions[j].output
-          acc[j] = self:computeAccuracy(output[j]:contiguous(), label[j]:float())
-        else
-          loss[j] = 0
-          acc[j] = 0/0
+      if self.nOutput == 5 then
+        local proj_ = {}
+        for j = 1, #proj do
+          proj_[j] = proj[j]:clone()
+          proj_[j][proj_[j]:eq(0)] = output[5][j][proj_[j]:eq(0)]
         end
+        target = {hmap, repos, trans, focal, proj_}
       end
-      acc = torch.Tensor(acc)
+      self.criterion:forward(self.model.output, target)
 
       -- Backprop
       self.model:zeroGradParameters()
-      self.criterion:backward(self.model.output, label)
+      self.criterion:backward(self.model.output, target)
       self.model:backward(input, self.criterion.gradInput)
 
       -- Optimization
       optim.rmsprop(feval, self.params, self.optimState)
+
+      -- Compute loss and error
+      for j = 1, self.opt.seqLength do
+        proj[j] = proj[j]:float()
+        if j <= self.seqlen then
+          if self.nOutput == 1 then
+            loss[j] = self.criterion.criterions[j].output
+            err[j] = self:computeError(getPreds(output[j]:float()),proj[j])
+            acc[j] = self:computeAccuracy(getPreds(output[j]:float()),proj[j])
+          end
+          if self.nOutput == 5 then
+            local l1 = self.criterion.criterions[1].criterions[j].output
+            local l2 = self.criterion.criterions[5].criterions[j].output
+            loss[j] = 0.0
+            loss[j] = loss[j] + l1 * 1
+            loss[j] = loss[j] + l2 * self.opt.weightProj
+            err[j] = self:computeError(getPreds(output[1][j]:float()),proj[j])
+            acc[j] = self:computeAccuracy(getPreds(output[1][j]:float()),proj[j])
+          end
+        else
+          loss[j] = 0/0
+          err[j] = 0/0
+          acc[j] = 0/0
+        end
+      end
+      acc = torch.Tensor(acc)
     end
 
     -- Breakdown nngraph model
@@ -259,10 +297,13 @@ function Trainer:train(epoch, loaders)
     entry[3] = string.format("%.3f" % time)
     entry[4] = string.format("%.3f" % dataTime)
     for j = 1, self.opt.seqLength do
-      entry[#entry+1] = string.format("%.5f" % loss[j])
+      entry[#entry+1] = string.format("%7.5f" % loss[j])
     end
     for j = 1, self.opt.seqLength do
-      entry[#entry+1] = string.format("%.5f" % acc[j])
+      entry[#entry+1] = string.format("%7.4f" % err[j])
+    end
+    for j = 1, self.opt.seqLength do
+      entry[#entry+1] = string.format("%7.5f" % acc[j])
     end
     self.logger['train']:add(entry)
   
@@ -298,9 +339,10 @@ function Trainer:test(epoch, iter, loaders, split)
   )
   local dataloader = loaders[split]
   local size = dataloader:sizeDataset()
-  local lossSum, accSum = {}, {}
+  local lossSum, errSum, accSum = {}, {}, {}
   for i = 1, self.opt.seqLength do
     lossSum[i] = 0.0
+    errSum[i] = 0.0
     accSum[i] = 0.0
   end
   local N = 0
@@ -315,27 +357,59 @@ function Trainer:test(epoch, iter, loaders, split)
 
   self:setModelMode('evaluate')
   for i, sample in dataloader:run({train=false}) do
-    -- Get input and label
-    local input = sample.input[1]
-    local label = sample.label
+    -- Get input/output and convert to CUDA
+    local input = sample.input[1]:cuda()
+    local repos, trans, focal, hmap, proj = {}, {}, {}, {}, {}
+    for j = 1, #sample.input do
+      repos[j] = sample.repos[j]:cuda()
+      trans[j] = sample.trans[j]:cuda()
+      focal[j] = sample.focal[j]:cuda()
+      hmap[j] = sample.hmap[j]:cuda()
+      proj[j] = sample.proj[j]:cuda()
+    end
 
-    -- Convert to CUDA
-    input, label = self:convertCuda(input, label)
+    -- Get target
+    local target
+    if self.nOutput == 1 then target = hmap end
 
     -- Init output
-    local loss, acc = {}, {}
+    local loss, err, acc = {}, {}, {}
 
     -- Single nngraph model
     if torch.type(self.model) == 'nn.gModule' then
       -- Forward pass
       local output = self.model:forward(input)
-      self.criterion:forward(self.model.output, label)
-      for j = 1, #output do
+      if self.nOutput == 5 then
+        local proj_ = {}
+        for j = 1, #proj do
+          proj_[j] = proj[j]:clone()
+          proj_[j][proj_[j]:eq(0)] = output[5][j][proj_[j]:eq(0)]
+        end
+        target = {hmap, repos, trans, focal, proj_}
+      end
+      self.criterion:forward(self.model.output, target)
+
+      -- Compute loss and error
+      for j = 1, self.opt.seqLength do
+        proj[j] = proj[j]:float()
         if j <= self.seqlen then
-          loss[j] = self.criterion.criterions[j].output
-          acc[j] = self:computeAccuracy(output[j]:contiguous(), label[j]:float())
+          if self.nOutput == 1 then
+            loss[j] = self.criterion.criterions[j].output
+            err[j] = self:computeError(getPreds(output[j]:float()),proj[j])
+            acc[j] = self:computeAccuracy(getPreds(output[j]:float()), proj[j])
+          end
+          if self.nOutput == 5 then
+            local l1 = self.criterion.criterions[1].criterions[j].output
+            local l2 = self.criterion.criterions[5].criterions[j].output
+            loss[j] = 0.0
+            loss[j] = loss[j] + l1 * 1
+            loss[j] = loss[j] + l2 * self.opt.weightProj
+            err[j] = self:computeError(getPreds(output[1][j]:float()),proj[j])
+            acc[j] = self:computeAccuracy(getPreds(output[1][j]:float()), proj[j])
+          end
         else
-          loss[j] = 0
+          loss[j] = 0/0
+          err[j] = 0/0
           acc[j] = 0/0
         end
       end
@@ -396,13 +470,14 @@ function Trainer:test(epoch, iter, loaders, split)
     end
 
     -- Accumulate loss and acc
+    assert(input:size(1) == 1, 'batch size must be 1 with run({train=false})')
     if torch.all(acc:sub(1,self.seqlen):eq(acc:sub(1,self.seqlen))) then
-      local batchSize = input:size(1)
       for j = 1, self.opt.seqLength do
         lossSum[j] = lossSum[j] + loss[j]
+        errSum[j] = errSum[j] + err[j]
         accSum[j] = accSum[j] + acc[j]
       end
-      N = N + batchSize
+      N = N + 1
     end 
 
     xlua.progress(i, size)
@@ -412,6 +487,7 @@ function Trainer:test(epoch, iter, loaders, split)
   -- Compute mean loss and accuracy
   for i = 1, self.opt.seqLength do
     lossSum[i] = lossSum[i] / N
+    errSum[i] = errSum[i] / N
     accSum[i] = accSum[i] / N
   end
 
@@ -423,31 +499,28 @@ function Trainer:test(epoch, iter, loaders, split)
   entry[3] = string.format("%.3f" % testTime)
   entry[4] = string.format("%d" % 0/0)
   for j = 1, self.opt.seqLength do
-    entry[#entry+1] = string.format("%.5f" % lossSum[j])
+    entry[#entry+1] = string.format("%7.5f" % lossSum[j])
   end
   for j = 1, self.opt.seqLength do
-    entry[#entry+1] = string.format("%.5f" % accSum[j])
+    entry[#entry+1] = string.format("%7.4f" % errSum[j])
+  end
+  for j = 1, self.opt.seqLength do
+    entry[#entry+1] = string.format("%7.5f" % accSum[j])
   end
   self.logger[split]:add(entry)
 end
 
 function Trainer:predict(loaders, split)
   local dataloader = loaders[split]
-  local sidx = torch.LongTensor(dataloader:sizeSampled())
-  local heatmaps
 
   print("=> Generating predictions ...")
   xlua.progress(0, dataloader:sizeSampled())
 
   self:setModelMode('evaluate')
   for i, sample in dataloader:run({train=false,samp=true}) do
-    -- Get input and label
+    -- Get input/output and convert to CUDA
     local index = sample.index
-    local input = sample.input[1]
-    local label = sample.label
-
-    -- Convert to CUDA
-    input, label = self:convertCuda(input, label)
+    local input = sample.input[1]:cuda()
 
     -- Init output
     local output = {}
@@ -501,48 +574,62 @@ function Trainer:predict(loaders, split)
       end
     end
 
-    -- Copy output
-    if not heatmaps then
-      heatmaps = torch.FloatTensor(
-          dataloader:sizeSampled(), self.opt.seqLength,
-          label[1]:size(2), self.opt.outputRes, self.opt.outputRes
-      )
-    end
-    assert(input:size(1) == 1, 'batch size must be 1 with run({pred=true})')
-    sidx[i] = index[1]
-    for j = 1, #output do
-      heatmaps[i][j]:copy(output[j][1])
-      -- heatmaps[i][j]:copy(label[j][1])
+    -- Save output
+    assert(input:size(1) == 1, 'batch size must be 1 with run({train=false})')
+    if self.nOutput == 1 then output = {output} end
+    
+    local pred_path = paths.concat(self.opt.save,'pred_' .. split)
+    local pred_file = paths.concat(pred_path, string.format("%05d.mat" % index[1]))
+    makedir(pred_path)
+    if not paths.filep(pred_file) then
+      local hmap = torch.FloatTensor(self.opt.seqLength, output[1][1]:size(2),
+          self.opt.outputRes, self.opt.outputRes)
+      for j = 1, self.opt.seqLength do hmap[j]:copy(output[1][j][1]) end
+      if self.nOutput == 1 then
+        matio.save(pred_file, {hmap = hmap})
+      end
+      if self.nOutput == 5 then
+        local repos = torch.FloatTensor(self.opt.seqLength, output[2][1]:size(2), 3)
+        for j = 1, self.opt.seqLength do repos[j]:copy(output[2][j][1]) end
+        matio.save(pred_file, {hmap = hmap, repos = repos})
+      end
     end
 
     xlua.progress(i, dataloader:sizeSampled())
   end
   self:setModelMode('training')
-
-  -- Sort heatmaps by index
-  local sidx, i = torch.sort(sidx)
-  heatmaps = heatmaps:index(1, i)
-
-  -- Save final predictions
-  local f = hdf5.open(self.opt.save .. '/preds_' .. split .. '.h5', 'w')
-  -- local f = hdf5.open(self.opt.save .. '/gt_' .. split .. '.h5', 'w')
-  f:write('heatmaps', heatmaps)
-  f:close()
 end
 
-function Trainer:setSeqLenCritWeight(epoch)
+function Trainer:setSeqLenCritWeight(currBase, epoch)
   local seqlen
   -- Start len from 2 and no larger than data sequence length
   -- seqlen = math.ceil(epoch / self.opt.currInt) + 1
-  seqlen = 2 ^ math.ceil(epoch / self.opt.currInt)
+  seqlen = currBase * 2 ^ math.ceil((epoch-1) / self.opt.currInt)
   seqlen = math.min(seqlen, self.opt.seqLength)
   -- Single nngraph model
   if torch.type(self.model) == 'nn.gModule' then
-    for i = 1, #self.criterion.weights do
-      if i <= seqlen then
-        self.criterion.weights[i] = 1
-      else
-        self.criterion.weights[i] = 0
+    assert(self.nOutput == 1 or self.nOutput == 5)
+    if self.nOutput == 1 then
+      for i = 1, self.opt.seqLength do
+        if i <= seqlen then
+          self.criterion.weights[i] = 1
+        else
+          self.criterion.weights[i] = 0
+        end
+      end
+    end
+    if self.nOutput == 5 then
+      for i = 1, self.opt.seqLength do
+        self.criterion.criterions[2].weights[i] = 0
+        self.criterion.criterions[3].weights[i] = 0
+        self.criterion.criterions[4].weights[i] = 0
+        if i <= seqlen then
+          self.criterion.criterions[1].weights[i] = 1
+          self.criterion.criterions[5].weights[i] = self.opt.weightProj
+        else
+          self.criterion.criterions[1].weights[i] = 0
+          self.criterion.criterions[5].weights[i] = 0
+        end
       end
     end
   end
@@ -581,14 +668,6 @@ function Trainer:setModelMode(mode)
   end
 end
 
-function Trainer:convertCuda(input, label)
-  input = input:cuda()
-  for i = 1, #label do
-    label[i] = label[i]:cuda()
-  end
-  return input, label
-end
-
 function Trainer:resetRNNStates()
   for i = 1, #self.model['rnn'] do
     self.model['rnn'][i]:apply(function(module)
@@ -607,8 +686,8 @@ function Trainer:zeroGradParams()
   end
 end
 
-function Trainer:computeAccuracy(output, target)
-  -- Ignore frame with no visible joints
+function Trainer:ignoreFrames(output, target)
+  -- Ignore frames with no visible joints
   local keepInd = {}
   for i = 1, target:size(1) do
     if torch.any(target[i]:ne(0)) then
@@ -618,14 +697,45 @@ function Trainer:computeAccuracy(output, target)
   if #keepInd ~= target:size(1) then
     -- Return nan if all frames have no visible joints
     if next(keepInd) == nil then
-      return 0/0
+      return 0/0, 0/0
     end
     local ind = torch.LongTensor(keepInd)
     output = output:index(1, ind)
     target = target:index(1, ind)
   end
+  return output, target
+end
 
-  return heatmapAccuracy(output, target, nil, nil, self.opt.outputRes)
+function Trainer:computeError(output, target)
+-- target: N x d x 2
+-- output: N x d x 2
+  local output, target = self:ignoreFrames(output, target)
+  if output ~= output then
+    return 0/0
+  end
+  local e, n = {}, {}
+  for i = 1, target:size(1) do
+    e[i], n[i] = 0.0, 0.0
+    for j = 1, target:size(2) do
+      if target[i][j][1] > 0 then
+        local p1 = target:select(2,j)
+        local p2 = output:select(2,j)
+        n[i] = n[i] + 1
+        e[i] = e[i] + torch.csub(p1,p2):pow(2):sum(2):sqrt()[1][1]
+      end
+    end
+  end
+  return torch.cdiv(torch.Tensor(e),torch.Tensor(n)):mean()
+end
+
+function Trainer:computeAccuracy(output, target)
+-- target: N x d x 2
+-- output: N x d x 2
+  local output, target = self:ignoreFrames(output, target)
+  if output ~= output then
+    return 0/0
+  end
+  return coordAccuracy(output, target, nil, nil, self.opt.outputRes)
 end
 
 return M.Trainer

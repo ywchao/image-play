@@ -3,6 +3,8 @@ require 'image'
 require 'common/util'
 require 'lib/util/img'
 
+local geometry = require 'lib/util/geometry'
+
 local M = {}
 local PennCropDataset = torch.class('image-play.PennCropDataset', M)
 
@@ -97,33 +99,42 @@ function PennCropDataset:size()
 end
 
 function PennCropDataset:get(idx, train)
-  local input = {}
-  local label = {}
-  local img, center, scale
-  local inp, out
+  local input, repos, trans, focal, hmap, proj = {}, {}, {}, {}, {}, {}
+  local center, scale
 
   local seqIdx = self:_getSeq(idx)
   for i = 1, seqIdx:numel() do
-    sid = seqIdx[i]
+    local sid = seqIdx[i]
     -- Load image
-    img = self:_loadImage(sid)
+    local img = self:_loadImage(sid)
     -- Get center and scale (same for all frames)
     if i == 1 then
       center, scale = unpack(self:_getCenterScale(img))
     end
     -- Transform image
-    inp = crop(img, center, scale, 0, self.inputRes)
-    -- Generate label
+    local inp = crop(img, center, scale, 0, self.inputRes)
+    -- Get projection
     local pts = self.part[sid]
     local vis = self.visible[sid]
-    out = torch.zeros(pts:size(1), self.outputRes, self.outputRes)
+    local pj = torch.zeros(pts:size())
     for j = 1, pts:size(1) do
       if vis[j] == 1 then
-        drawGaussian(out[j], transform(pts[j], center, scale, 0, self.outputRes), 2)
+        pj[j] = transform(pts[j], center, scale, 0, self.outputRes, false, false)
+      end
+    end
+    -- Generate heatmap
+    local hm = torch.zeros(pts:size(1), self.outputRes, self.outputRes)
+    for j = 1, pts:size(1) do
+      if vis[j] == 1 then
+        drawGaussian(hm[j], torch.round(pj[j]), 2)
       end
     end
     input[i] = inp
-    label[i] = out
+    repos[i] = torch.zeros(pts:size(1),3)
+    trans[i] = torch.zeros(3)
+    focal[i] = torch.zeros(1)
+    hmap[i] = hm
+    proj[i] = pj
   end
   -- Augment data
   if train then
@@ -140,13 +151,21 @@ function PennCropDataset:get(idx, train)
     if torch.uniform() <= 0.5 then
       for i = 1, #input do
         input[i] = flip(input[i])
-        label[i] = flip(shuffleLR(label[i], 'penn-crop'))
+        hmap[i] = flip(shuffleLR(hmap[i], 'penn-crop'))
+        proj[i] = geometry.shuffleLR(proj[i],'penn-crop')
+        local ind = proj[i]:eq(0)
+        proj[i][{{},1}] = self.outputRes - proj[i][{{},1}] + 1
+        proj[i][ind] = 0
       end
     end
   end
   return {
     input = input,
-    label = label,
+    repos = repos,
+    trans = trans,
+    focal = focal,
+    hmap = hmap,
+    proj = proj,
   }
 end
 
