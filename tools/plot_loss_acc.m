@@ -53,7 +53,7 @@ for i = 1:max_epoch
 end
 it = (epoch(ind)-1)*epoch_size + iter(ind);
 
-subplot('Position',[0.05+0/2 0.55 1/2-0.05 0.4]);
+subplot('Position',[0.05+0/2 0.56 1/2-0.05 0.4]);
 plot(it,loss(ind,1),'--r'); hold on;
 plot(it,loss(ind,2),'r');
 for i = 3:16
@@ -68,7 +68,7 @@ axis([0 it(end) ylim]);
 title('training loss');
 xlabel('iteration');
 
-subplot('Position',[0.05+1/2 0.55 1/2-0.05 0.4]);
+subplot('Position',[0.05+1/2 0.56 1/2-0.05 0.4]);
 plot(it,acc(ind,1),'--r'); hold on;
 plot(it,acc(ind,2),'r');
 for i = 3:16
@@ -98,7 +98,7 @@ end
 
 it = (epoch-1)*epoch_size + iter;
 
-subplot('Position',[0.05+0/2 0.05 1/2-0.05 0.4]);
+subplot('Position',[0.05+0/2 0.06 1/2-0.05 0.4]);
 plot(it,loss(:,1),'--ro','MarkerSize',3); hold on;
 plot(it,loss(:,2),'-ro','MarkerSize',3);
 for i = 3:16
@@ -112,7 +112,7 @@ grid on;
 title('validation loss');
 xlabel('iteration');
 
-subplot('Position',[0.05+1/2 0.05 1/2-0.05 0.4]);
+subplot('Position',[0.05+1/2 0.06 1/2-0.05 0.4]);
 plot(it,acc(:,1),'--ro','MarkerSize',3); hold on;
 plot(it,acc(:,2),'-ro','MarkerSize',3);
 for i = 3:16
@@ -127,23 +127,24 @@ title('validation accuracy');
 xlabel('iteration');
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-subplot('Position',[0.05+0/2 0.55 1/2-0.05 0.4]); set(gca,'fontsize',5);
-subplot('Position',[0.05+1/2 0.55 1/2-0.05 0.4]); set(gca,'fontsize',5);
-subplot('Position',[0.05+0/2 0.05 1/2-0.05 0.4]); set(gca,'fontsize',5);
-subplot('Position',[0.05+1/2 0.05 1/2-0.05 0.4]); set(gca,'fontsize',5);
+subplot('Position',[0.05+0/2 0.56 1/2-0.05 0.4]); set(gca,'fontsize',6);
+subplot('Position',[0.05+1/2 0.56 1/2-0.05 0.4]); set(gca,'fontsize',6);
+subplot('Position',[0.05+0/2 0.06 1/2-0.05 0.4]); set(gca,'fontsize',6);
+subplot('Position',[0.05+1/2 0.06 1/2-0.05 0.4]); set(gca,'fontsize',6);
 
-subplot('Position',[0.05+0/2 0.55 1/2-0.05 0.4]);
+subplot('Position',[0.05+0/2 0.56 1/2-0.05 0.4]);
 lim = [xlim, ylim];
 axis([lim(1:2) 0 0.01]);
-subplot('Position',[0.05+0/2 0.05 1/2-0.05 0.4]);
-axis([lim(1:2) 0.0015 0.0045]);
+subplot('Position',[0.05+0/2 0.06 1/2-0.05 0.4]);
+axis([lim(1:2) 0 0.01]);
 
-subplot('Position',[0.05+1/2 0.55 1/2-0.05 0.4]);
+subplot('Position',[0.05+1/2 0.56 1/2-0.05 0.4]);
 lim = [xlim, ylim];
-axis([lim(1:2) 0 1]);
-subplot('Position',[0.05+1/2 0.05 1/2-0.05 0.4]);
-axis([lim(1:2) 0.35 0.90]);
-set(gca,'YTick',0.35:0.05:0.90);
+axis([lim(1:2) 0.40 1]);
+set(gca,'YTick',0.40:0.05:1.00);
+subplot('Position',[0.05+1/2 0.06 1/2-0.05 0.4]);
+axis([lim(1:2) 0.40 1]);
+set(gca,'YTick',0.40:0.05:1.00);
 
 % save to file
 save_file = ['outputs/plot_' exp_name '.pdf'];
