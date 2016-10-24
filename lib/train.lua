@@ -590,8 +590,14 @@ function Trainer:predict(loaders, split)
       end
       if self.nOutput == 5 then
         local repos = torch.FloatTensor(self.opt.seqLength, output[2][1]:size(2), 3)
-        for j = 1, self.opt.seqLength do repos[j]:copy(output[2][j][1]) end
-        matio.save(pred_file, {hmap = hmap, repos = repos})
+        local trans = torch.FloatTensor(self.opt.seqLength, 3)
+        local focal = torch.FloatTensor(self.opt.seqLength, 1)
+        for j = 1, self.opt.seqLength do
+          repos[j]:copy(output[2][j][1])
+          trans[j]:copy(output[3][j][1])
+          focal[j]:copy(output[4][j][1])
+        end
+        matio.save(pred_file, {hmap = hmap, repos = repos, trans = trans, focal = focal})
       end
     end
 

@@ -1,6 +1,5 @@
 classdef penn_crop
     properties (Access = private)
-        opt
         split
         dir
         ind2sub
@@ -13,11 +12,11 @@ classdef penn_crop
         seqLength
         inputRes
         outputRes
+        img
     end
     methods
         % constructor
         function obj = penn_crop(opt, split)
-            obj.opt = opt;
             obj.split = split;
             obj.dir = fullfile(opt.data, 'frames');
             assert(exist(obj.dir,'dir') == 7, ['directory does not exist: ' obj.dir]);
@@ -35,13 +34,15 @@ classdef penn_crop
             % get input and output resolution
             obj.inputRes = opt.inputRes;
             obj.outputRes = opt.outputRes;
+            % load lib
+            obj.img = ip_img();
         end
         
         % get seq id and num of frames
         [seqId, nFrame] = preproAnno(obj);
         
         % get phase sequence in global index (ind2sub)
-        [ind, has_flow] = getSeq(obj, i);
+        ind = getSeq(obj, i);
         
         % get image path
         pa = imgpath(obj, idx);

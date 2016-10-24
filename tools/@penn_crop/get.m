@@ -15,24 +15,7 @@ for i = 1:numel(seqIdx)
         [center, scale] = getCenterScale(obj, img);
     end
     % Transform image
-    % TODO: following the implement of penn-crop.lua
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    if size(img, 1) > size(img, 2)
-        outputSize = [obj.inputRes NaN];
-    else
-        outputSize = [NaN obj.inputRes];
-    end
-    img = imresize(img, outputSize);
-    % pad zeros
-    inp = uint8(zeros(obj.inputRes,obj.inputRes,3));
-    if size(img,1) > size(img,2)
-        ul = [1 round((obj.inputRes-size(img,2))/2)+1];
-    else
-        ul = [round((obj.inputRes-size(img,1))/2)+1 1];
-    end
-    inp(ul(1):ul(1)+size(img,1)-1, ul(2):ul(2)+size(img,2)-1, :) = img;
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    input(i,:,:,:) = permute(inp, [4 3 1 2]);
+    input(i,:,:,:) = obj.img.crop(img, center, scale, 0, obj.inputRes);
 end
 
 end

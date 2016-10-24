@@ -1,4 +1,4 @@
-function [ ind, has_flow ] = getSeq( obj, i )
+function [ ind ] = getSeq( obj, i )
 
 id = obj.ind2sub(i, 1);
 
@@ -9,6 +9,7 @@ if strcmp(obj.seqType,'phase') == 1
     ind = linspace(i, i+nFrame-1, obj.nPhase);
     ind = round(ind);
     assert(numel(ind) == obj.nPhase);
+    ind = ind(1:obj.seqLength);
 end
 if strcmp(obj.seqType,'raw') == 1
     ind = i:i+obj.seqLength-1;
@@ -25,15 +26,5 @@ ind(rep_ind) = rep_val;
 rep_ind = obj.ind2sub(ind,1) ~= id;
 rep_val = max(ind(rep_ind == 0));
 ind(rep_ind) = rep_val;
-
-% has_flow
-has_flow = ind(1:end-1) ~= ind(2:end);
-has_flow = [has_flow 0];
-
-% drop frames over LSTM sequence length
-if strcmp(obj.seqType,'phase') == 1 && size(ind,1) ~= obj.seqLength
-    ind = ind(1:obj.seqLength);
-    has_flow = has_flow(1:obj.seqLength);
-end
 
 end
