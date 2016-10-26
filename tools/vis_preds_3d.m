@@ -6,7 +6,8 @@ addpath('skeleton2d3d/H36M_utils/external_utils');
 addpath('skeleton2d3d/H36M_utils/external_utils/lawrennd-mocap');
 addpath('skeleton2d3d/H36M_utils/external_utils/xml_io_tools');
 
-% expID = 'seq16-hg-256-res-clstm-res-64-base16-w1e-5';
+% expID = 'seq16-hg-256-res-clstm-base16';  mode = 0;
+% expID = 'seq16-hg-256-res-clstm-res-64-base16-w1e-6';  mode = 1;
 
 % split = 'train';
 % split = 'val';
@@ -70,7 +71,12 @@ run = sidx(ismember(sid,seq));
 
 % init figure
 figure(1);
-set(gcf,'Position',[2 26 1830 330]);
+if mode == 0
+    set(gcf,'Position',[2 26 610 330]);
+end
+if mode == 1
+    set(gcf,'Position',[2 26 1830 330]);
+end
 clear hi hh hs1 hs2 hr1 hr2
 
 % load libraries
@@ -86,17 +92,19 @@ for i = run
     % load predictions
     pred_file = sprintf('./exp/penn-crop/%s/pred_%s/%05d.mat',expID,split,i);
     preds = load(pred_file);
-    joints = [10,15,12,16,13,17,14,2,5,3,6,4,7];
-    repos = zeros(opt.seqLength,17,3);
-    repos(:,joints,:) = preds.repos;
-    repos(:,1,:) = (preds.repos(:,8,:) + preds.repos(:,9,:))/2;
-    repos(:,8,:) = (preds.repos(:,2,:) + preds.repos(:,3,:) + preds.repos(:,8,:) + preds.repos(:,9,:))/4;
-    repos(:,9,:) = (preds.repos(:,1,:) + preds.repos(:,2,:) + preds.repos(:,3,:))/3;
-    repos(:,11,:) = preds.repos(:,1,:);
-    repos = permute(repos,[1,3,2]);
-    trans = preds.trans;
-    focal = preds.focal;
     hmap = preds.hmap;
+    if mode == 1
+        joints = [10,15,12,16,13,17,14,2,5,3,6,4,7];
+        repos = zeros(opt.seqLength,17,3);
+        repos(:,joints,:) = preds.repos;
+        repos(:,1,:) = (preds.repos(:,8,:) + preds.repos(:,9,:))/2;
+        repos(:,8,:) = (preds.repos(:,2,:) + preds.repos(:,3,:) + preds.repos(:,8,:) + preds.repos(:,9,:))/4;
+        repos(:,9,:) = (preds.repos(:,1,:) + preds.repos(:,2,:) + preds.repos(:,3,:))/3;
+        repos(:,11,:) = preds.repos(:,1,:);
+        repos = permute(repos,[1,3,2]);
+        trans = preds.trans;
+        focal = preds.focal;
+    end
     % load input
     [input, ~, ~, ~] = dataset.get(i);
     input = permute(input,[1,3,4,2]);
@@ -112,13 +120,23 @@ for i = run
         if exist('hi','var')
             delete(hi);
         end
-        hi = subplot('Position',[0.00+0/6 0.00 1/6-0.00 1.00]);
+        if mode == 0
+            hi = subplot('Position',[0.00+0/2 0.00 1/2-0.00 1.00]);
+        end
+        if mode == 1
+            hi = subplot('Position',[0.00+0/6 0.00 1/6-0.00 1.00]);
+        end
         imshow(im); hold on;
         % draw heatmap
         if exist('hh','var')
             delete(hh);
         end
-        hh = subplot('Position',[0.00+1/6 0.00 1/6-0.00 1.00]);
+        if mode == 0
+            hh = subplot('Position',[0.00+1/2 0.00 1/2-0.00 1.00]);
+        end
+        if mode == 1
+            hh = subplot('Position',[0.00+1/6 0.00 1/6-0.00 1.00]);
+        end
         hm = squeeze(hmap(j,:,:,:));
         ip = squeeze(input(1,:,:,:));
         inp64 = imresize(double(ip),[opt.outputRes opt.outputRes]) * 0.3;
@@ -131,6 +149,12 @@ for i = run
         totalHm = permute(totalHm,[2 3 1]);
         totalHm = uint8(totalHm);
         imshow(totalHm);
+        if mode == 0
+            % save figure
+            set(gcf,'PaperPositionMode','auto');
+            print(gcf,vis_file,'-dpng','-r0');
+            continue
+        end
         % show 3D skeleton in camera coordinates
         for k = 1:2
             if k == 1
