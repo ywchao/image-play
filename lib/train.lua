@@ -150,8 +150,11 @@ function Trainer:train(epoch, loaders)
             loss[j] = 0.0
             loss[j] = loss[j] + l1 * 1
             loss[j] = loss[j] + l2 * self.opt.weightProj
-            err[j] = self:computeError(getPreds(output[1][j]:float()),proj[j])
-            acc[j] = self:computeAccuracy(getPreds(output[1][j]:float()),proj[j])
+            local pred
+            if self.opt.evalOut == 's3' then pred = output[5][j]:float() end
+            if self.opt.evalOut == 'hg' then pred = getPreds(output[1][j]:float()) end
+            err[j] = self:computeError(pred,proj[j])
+            acc[j] = self:computeAccuracy(pred,proj[j])
           end
         else
           loss[j] = 0/0
@@ -396,7 +399,7 @@ function Trainer:test(epoch, iter, loaders, split)
           if self.nOutput == 1 then
             loss[j] = self.criterion.criterions[j].output
             err[j] = self:computeError(getPreds(output[j]:float()),proj[j])
-            acc[j] = self:computeAccuracy(getPreds(output[j]:float()), proj[j])
+            acc[j] = self:computeAccuracy(getPreds(output[j]:float()),proj[j])
           end
           if self.nOutput == 5 then
             local l1 = self.criterion.criterions[1].criterions[j].output
@@ -404,8 +407,11 @@ function Trainer:test(epoch, iter, loaders, split)
             loss[j] = 0.0
             loss[j] = loss[j] + l1 * 1
             loss[j] = loss[j] + l2 * self.opt.weightProj
-            err[j] = self:computeError(getPreds(output[1][j]:float()),proj[j])
-            acc[j] = self:computeAccuracy(getPreds(output[1][j]:float()), proj[j])
+            local pred
+            if self.opt.evalOut == 's3' then pred = output[5][j]:float() end
+            if self.opt.evalOut == 'hg' then pred = getPreds(output[1][j]:float()) end
+            err[j] = self:computeError(pred,proj[j])
+            acc[j] = self:computeAccuracy(pred,proj[j])
           end
         else
           loss[j] = 0/0
@@ -616,6 +622,7 @@ function Trainer:setSeqLenCritWeight(currBase, epoch)
   if torch.type(self.model) == 'nn.gModule' then
     assert(self.nOutput == 1 or self.nOutput == 5)
     if self.nOutput == 1 then
+      assert(self.opt.weightHMap == 1)
       for i = 1, self.opt.seqLength do
         if i <= seqlen then
           self.criterion.weights[i] = 1
@@ -630,7 +637,7 @@ function Trainer:setSeqLenCritWeight(currBase, epoch)
         self.criterion.criterions[3].weights[i] = 0
         self.criterion.criterions[4].weights[i] = 0
         if i <= seqlen then
-          self.criterion.criterions[1].weights[i] = 1
+          self.criterion.criterions[1].weights[i] = self.opt.weightHMap
           self.criterion.criterions[5].weights[i] = self.opt.weightProj
         else
           self.criterion.criterions[1].weights[i] = 0
