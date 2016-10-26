@@ -266,4 +266,29 @@ function M.loadSkel3DNet(model, model_s3)
   model:zeroGradParameters()
 end
 
+function M.loadHGS3(model, model_hgs3)
+  -- Load weight and bias
+  local clstm_gap = 11
+  for i = 1, #model_hgs3.modules do
+    -- Get corresponding module index in model
+    local c = math.max(math.min(math.ceil((i-9)/3),4)*clstm_gap,0) + i
+    if i > 8 + 3 * 4 + 1 then
+      c = c + clstm_gap
+    end
+    if i >= 38 then c = c + 2 end
+    if i >= 55 then c = c + 2 end
+    if i >= 62 then c = c + 2 end
+    if i >= 66 then c = c + 2 end
+    -- Tie weight and bias
+    local name = torch.typename(model.modules[c])
+    local name_hgs3 = torch.typename(model_hgs3.modules[i])
+    assert(name == name_hgs3, 'weight loading error: class name mismatch')
+    tieWeightBiasOneModule(model_hgs3.modules[i], model.modules[c])
+    -- Fix s3 parameters for now
+    if i >= 95 then
+      fixWeightBiasOneModule(model.modules[c])
+    end
+  end
+end
+
 return M

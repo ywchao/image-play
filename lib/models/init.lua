@@ -64,6 +64,13 @@ function M.setup(opt, checkpoint)
       local model_s3 = torch.load(opt.s3Model)
       Model.loadSkel3DNet(model, model_s3)
     end
+    if opt.hgs3Model ~= 'none' then
+      assert(opt.hgModel == 'none' and opt.s3Model == 'none')
+      assert(paths.filep(opt.hgs3Model),
+          'initial hg/s3 combined model not found: ' .. opt.hgs3Model)
+      local model_hgs3 = torch.load(opt.hgs3Model)
+      Model.loadHGS3(model, model_hgs3)
+    end
   end
 
   -- Create criterion

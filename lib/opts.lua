@@ -39,6 +39,7 @@ function M.parse(arg)
   cmd:option('-numLayers',           1, 'Number of RNN layers') 
   cmd:option('-hgModel',        'none', 'Path to hourglass model for intialization')
   cmd:option('-s3Model',        'none', 'Path to skel3dnet model for intialization')
+  cmd:option('-hgs3Model',      'none', 'Path to hg/s3 combined model for initialization')
   cmd:text()
 
   local opt = cmd:parse(arg or {})
