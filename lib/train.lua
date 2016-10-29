@@ -731,10 +731,10 @@ function Trainer:computeError(output, target)
     e[i], n[i] = 0.0, 0.0
     for j = 1, target:size(2) do
       if target[i][j][1] > 0 then
-        local p1 = target:select(2,j)
-        local p2 = output:select(2,j)
+        local p1 = target[i][j]
+        local p2 = output[i][j]
         n[i] = n[i] + 1
-        e[i] = e[i] + torch.csub(p1,p2):pow(2):sum(2):sqrt()[1][1]
+        e[i] = e[i] + torch.dist(p1,p2)
       end
     end
   end
