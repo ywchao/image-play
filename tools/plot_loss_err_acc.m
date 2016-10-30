@@ -2,32 +2,43 @@ figure(1);
 
 % choose experiment
 
+dataset = 'penn-crop';
+
 % exp_name = 'seq16-hg-256-res-clstm-base16';
-% epoch_size = 26253;
-% disp_int = 1500;
 % exp_name = 'seq16-hg-256-res-clstm-base8';
-% epoch_size = 26253;
-% disp_int = 1500;
 % exp_name = 'seq16-hg-256-res-clstm';
 % epoch_size = 26253;
 % disp_int = 1500;
 
+% exp_name = 'seq16-hg-256-res-clstm-res-64-base16-w1e-8';
+% exp_name = 'seq16-hg-256-res-clstm-res-64-base16-w1e-7';
+% exp_name = 'seq16-hg-256-res-clstm-res-64-base16-w1e-6';
 % exp_name = 'seq16-hg-256-res-clstm-res-64-base16-w1e-5';
 % epoch_size = 26253;
 % disp_int = 1500;
-% exp_name = 'seq16-hg-256-res-clstm-res-64-base16-w1e-4';
+
+% exp_name = 'seq16-hg-256-res-clstm-res-64-fts3-hg-base16-w1e-8';
+% exp_name = 'seq16-hg-256-res-clstm-res-64-fts3-hg-base16-w1e-7';
+% exp_name = 'seq16-hg-256-res-clstm-res-64-fts3-hg-base16-w1e-6';
+% exp_name = 'seq16-hg-256-res-clstm-res-64-fts3-hg-base16-w1e-5';
 % epoch_size = 26253;
 % disp_int = 1500;
-% exp_name = 'seq16-hg-256-res-clstm-res-64-base16-w1e-3';
+
+% exp_name = 'seq16-hg-256-res-clstm-res-64-fts3-hg-base16-proj-only-lr1.0e-3';
+% exp_name = 'seq16-hg-256-res-clstm-res-64-fts3-hg-base16-proj-only-lr5.0e-4';
+% exp_name = 'seq16-hg-256-res-clstm-res-64-fts3-hg-base16-proj-only-lr2.5e-4';
+% exp_name = 'seq16-hg-256-res-clstm-res-64-fts3-hg-base16-proj-only-lr1.0e-4';
+% exp_name = 'seq16-hg-256-res-clstm-res-64-fts3-hg-base16-proj-only-lr5.0e-5';
+% exp_name = 'seq16-hg-256-res-clstm-res-64-fts3-hg-base16-proj-only-lr1.0e-5';
 % epoch_size = 26253;
 % disp_int = 1500;
-% exp_name = 'seq16-hg-256-res-clstm-res-64-base16-w1e-2';
-% epoch_size = 26253;
-% disp_int = 1500;
-% exp_name = 'seq16-hg-256-res-clstm-res-64-base16-w1e-1';
-% epoch_size = 26253;
-% disp_int = 1500;
-% exp_name = 'seq16-hg-256-res-clstm-res-64-base16-w1e0';
+
+% exp_name = 'seq16-hg-256-res-clstm-res-64-fts3-s3-base16-proj-only-lr1.0e-2';
+% exp_name = 'seq16-hg-256-res-clstm-res-64-fts3-s3-base16-proj-only-lr5.0e-3';
+% exp_name = 'seq16-hg-256-res-clstm-res-64-fts3-s3-base16-proj-only-lr2.5e-3';
+% exp_name = 'seq16-hg-256-res-clstm-res-64-fts3-s3-base16-proj-only-lr1.0e-3';
+% exp_name = 'seq16-hg-256-res-clstm-res-64-fts3-s3-base16-proj-only-lr5.0e-4';
+% exp_name = 'seq16-hg-256-res-clstm-res-64-fts3-s3-base16-proj-only-lr2.5e-4';
 % epoch_size = 26253;
 % disp_int = 1500;
 
@@ -39,7 +50,7 @@ seq_length = 16;
 format = ['%s %s %s %s' repmat(' %s %s %s',[1,seq_length])];
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-log_file = ['./exp/penn-crop/' exp_name '/train.log'];
+log_file = ['./exp/' dataset '/' exp_name '/train.log'];
 f = fopen(log_file);
 C = textscan(f,format);
 fclose(f);
@@ -111,7 +122,7 @@ axis([0 it(end) ylim]);
 title('training accuracy');
 xlabel('iteration');
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-log_file = ['./exp/penn-crop/' exp_name '/val.log'];
+log_file = ['./exp/' dataset '/' exp_name '/val.log'];
 f = fopen(log_file);
 C = textscan(f,format);
 fclose(f);
@@ -188,17 +199,17 @@ axis([lim(1:2) 0 0.01]);
 
 subplot('Position',[0.025+1/3 0.56 1/3-0.03 0.4]);
 lim = [xlim, ylim];
-axis([lim(1:2) 0 20]);
+axis([lim(1:2) 0 0.5]);
 subplot('Position',[0.025+1/3 0.06 1/3-0.03 0.4]);
-axis([lim(1:2) 0 10]);
+axis([lim(1:2) 0 0.5]);
 
 subplot('Position',[0.025+2/3 0.56 1/3-0.03 0.4]);
 lim = [xlim, ylim];
 axis([lim(1:2) 0 1]);
 set(gca,'YTick',0:0.05:1.00);
 subplot('Position',[0.025+2/3 0.06 1/3-0.03 0.4]);
-axis([lim(1:2) 0.40 1]);
-set(gca,'YTick',0.40:0.05:1.00);
+axis([lim(1:2) 0.30 1]);
+set(gca,'YTick',0.30:0.05:1.00);
 
 % save to file
 save_file = ['outputs/plot_' exp_name '.pdf'];

@@ -7,13 +7,13 @@ else
 fi
 
 CUDA_VISIBLE_DEVICES=$gpu_id th main.lua \
-  -expID seq16-hg-256-res-clstm-res-64-base16-w1e-4 \
+  -expID seq16-hg-256-res-clstm-res-64-base16-w1e-8 \
   -nThreads 4 \
   -nEpochs 1 \
   -batchSize 3 \
   -currBase 16 \
   -testInt 6600 \
-  -weightProj 1e-4 \
+  -weightProj 1e-8 \
   -netType hg-256-res-clstm-res-64 \
   -hgModel pose-hg-train/exp/penn_action_cropped/hg-256-ft/best_model.t7 \
   -s3Model skeleton2d3d/exp/h36m/res-64-t2/model_best.t7 \
