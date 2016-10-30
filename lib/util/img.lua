@@ -42,7 +42,8 @@ end
 -- function transform(pt, center, scale, rot, res, invert, int)
 function transform(pt, center, scale, rot, res, invert, round)
     local pt_ = torch.ones(3)
-    pt_[1],pt_[2] = pt[1]-1,pt[2]-1
+    -- pt_[1],pt_[2] = pt[1]-1,pt[2]-1
+    pt_[1],pt_[2] = pt[1],pt[2]
 
     local t = getTransform(center, scale, rot, res)
     if invert then
@@ -58,7 +59,8 @@ function transform(pt, center, scale, rot, res, invert, round)
     if round == nil or round == true then
         new_point = new_point:round()
     end
-    return new_point:add(1)
+    -- return new_point:add(1)
+    return new_point
 end
 
 -------------------------------------------------------------------------------

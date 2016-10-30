@@ -1,6 +1,7 @@
 require 'cunn'
 require 'cudnn'
 require 'optim'
+require 'lib/util/img'
 require 'lib/util/eval'
 require 'lib/util/Logger'
 require 'common/util'
@@ -111,7 +112,7 @@ function Trainer:train(epoch, loaders)
     if self.nOutput == 1 then target = hmap end
 
     -- Init output
-    local loss, err, acc = {}, {}, {}
+    local loss, err, acc, num = {}, {}, {}, {}
 
     -- Single nngraph model
     if torch.type(self.model) == 'nn.gModule' then
@@ -136,13 +137,15 @@ function Trainer:train(epoch, loaders)
       optim.rmsprop(feval, self.params, self.optimState)
 
       -- Compute loss and error
+      local center, scale = sample.center, sample.scale
+      local ref = self:getRef(scale)
       for j = 1, self.opt.seqLength do
-        proj[j] = proj[j]:float()
+        local gtpts = sample.gtpts[j]
         if j <= self.seqlen then
+          local pred, ne, na
           if self.nOutput == 1 then
             loss[j] = self.criterion.criterions[j].output
-            err[j] = self:computeError(getPreds(output[j]:float()),proj[j])
-            acc[j] = self:computeAccuracy(getPreds(output[j]:float()),proj[j])
+            pred = getPreds(output[j]:float())
           end
           if self.nOutput == 5 then
             local l1 = self.criterion.criterions[1].criterions[j].output
@@ -150,16 +153,20 @@ function Trainer:train(epoch, loaders)
             loss[j] = 0.0
             loss[j] = loss[j] + l1 * 1
             loss[j] = loss[j] + l2 * self.opt.weightProj
-            local pred
             if self.opt.evalOut == 's3' then pred = output[5][j]:float() end
             if self.opt.evalOut == 'hg' then pred = getPreds(output[1][j]:float()) end
-            err[j] = self:computeError(pred,proj[j])
-            acc[j] = self:computeAccuracy(pred,proj[j])
           end
+          pred = self:getOrigCoord(pred,center,scale)
+          err[j], ne = self:computeError(pred,gtpts,ref)
+          acc[j], na = self:computeAccuracy(pred,gtpts,ref)
+          assert(ne == na)
+          err[j] = err[j] / ne
+          acc[j] = acc[j] / ne
         else
           loss[j] = 0/0
           err[j] = 0/0
           acc[j] = 0/0
+          num[j] = 0/0
         end
       end
       acc = torch.Tensor(acc)
@@ -342,11 +349,12 @@ function Trainer:test(epoch, iter, loaders, split)
   )
   local dataloader = loaders[split]
   local size = dataloader:sizeDataset()
-  local lossSum, errSum, accSum = {}, {}, {}
+  local lossSum, errSum, accSum, numSum = {}, {}, {}, {}
   for i = 1, self.opt.seqLength do
     lossSum[i] = 0.0
     errSum[i] = 0.0
     accSum[i] = 0.0
+    numSum[i] = 0
   end
   local N = 0
 
@@ -376,7 +384,7 @@ function Trainer:test(epoch, iter, loaders, split)
     if self.nOutput == 1 then target = hmap end
 
     -- Init output
-    local loss, err, acc = {}, {}, {}
+    local loss, err, acc, num = {}, {}, {}, {}
 
     -- Single nngraph model
     if torch.type(self.model) == 'nn.gModule' then
@@ -393,13 +401,17 @@ function Trainer:test(epoch, iter, loaders, split)
       self.criterion:forward(self.model.output, target)
 
       -- Compute loss and error
+      -- TODO: evaluation can be simplified: keep only dist and compute err/acc
+      -- later. See matlab evaluation script.
+      local center, scale = sample.center, sample.scale
+      local ref = self:getRef(scale)
       for j = 1, self.opt.seqLength do
-        proj[j] = proj[j]:float()
+        local gtpts = sample.gtpts[j]
         if j <= self.seqlen then
+          local pred, ne, na
           if self.nOutput == 1 then
             loss[j] = self.criterion.criterions[j].output
-            err[j] = self:computeError(getPreds(output[j]:float()),proj[j])
-            acc[j] = self:computeAccuracy(getPreds(output[j]:float()),proj[j])
+            pred = getPreds(output[j]:float())
           end
           if self.nOutput == 5 then
             local l1 = self.criterion.criterions[1].criterions[j].output
@@ -407,16 +419,19 @@ function Trainer:test(epoch, iter, loaders, split)
             loss[j] = 0.0
             loss[j] = loss[j] + l1 * 1
             loss[j] = loss[j] + l2 * self.opt.weightProj
-            local pred
             if self.opt.evalOut == 's3' then pred = output[5][j]:float() end
             if self.opt.evalOut == 'hg' then pred = getPreds(output[1][j]:float()) end
-            err[j] = self:computeError(pred,proj[j])
-            acc[j] = self:computeAccuracy(pred,proj[j])
           end
+          pred = self:getOrigCoord(pred,center,scale)
+          err[j], ne = self:computeError(pred,gtpts,ref)
+          acc[j], na = self:computeAccuracy(pred,gtpts,ref)
+          assert(ne == na)
+          num[j] = ne
         else
           loss[j] = 0/0
           err[j] = 0/0
           acc[j] = 0/0
+          num[j] = 0/0
         end
       end
       acc = torch.Tensor(acc)
@@ -477,14 +492,14 @@ function Trainer:test(epoch, iter, loaders, split)
 
     -- Accumulate loss and acc
     assert(input:size(1) == 1, 'batch size must be 1 with run({train=false})')
-    if torch.all(acc:sub(1,self.seqlen):eq(acc:sub(1,self.seqlen))) then
-      for j = 1, self.opt.seqLength do
-        lossSum[j] = lossSum[j] + loss[j]
-        errSum[j] = errSum[j] + err[j]
-        accSum[j] = accSum[j] + acc[j]
-      end
-      N = N + 1
-    end 
+    assert(torch.all(acc:sub(1,self.seqlen):eq(acc:sub(1,self.seqlen))))
+    for j = 1, self.opt.seqLength do
+      lossSum[j] = lossSum[j] + loss[j]
+      errSum[j] = errSum[j] + err[j]
+      accSum[j] = accSum[j] + acc[j]
+      numSum[j] = numSum[j] + num[j]
+    end
+    N = N + 1
 
     xlua.progress(i, size)
   end
@@ -493,8 +508,8 @@ function Trainer:test(epoch, iter, loaders, split)
   -- Compute mean loss and accuracy
   for i = 1, self.opt.seqLength do
     lossSum[i] = lossSum[i] / N
-    errSum[i] = errSum[i] / N
-    accSum[i] = accSum[i] / N
+    errSum[i] = errSum[i] / numSum[i]
+    accSum[i] = accSum[i] / numSum[i]
   end
 
   -- Print and log
@@ -516,14 +531,22 @@ function Trainer:test(epoch, iter, loaders, split)
   self.logger[split]:add(entry)
 end
 
-function Trainer:predict(loaders, split)
+function Trainer:predict(loaders, split, eval)
   local dataloader = loaders[split]
+  local size, samp
+  if eval then
+    size = dataloader:sizeDataset()
+    samp = false
+  else
+    size = dataloader:sizeSampled()
+    samp = true
+  end
 
   print("=> Generating predictions ...")
-  xlua.progress(0, dataloader:sizeSampled())
+  xlua.progress(0, size)
 
   self:setModelMode('evaluate')
-  for i, sample in dataloader:run({train=false,samp=true}) do
+  for i, sample in dataloader:run({train=false,samp=samp}) do
     -- Get input/output and convert to CUDA
     local index = sample.index
     local input = sample.input[1]:cuda()
@@ -584,30 +607,52 @@ function Trainer:predict(loaders, split)
     assert(input:size(1) == 1, 'batch size must be 1 with run({train=false})')
     if self.nOutput == 1 then output = {output} end
     
-    local pred_path = paths.concat(self.opt.save,'pred_' .. split)
-    local pred_file = paths.concat(pred_path, string.format("%05d.mat" % index[1]))
-    makedir(pred_path)
-    if not paths.filep(pred_file) then
-      local hmap = torch.FloatTensor(self.opt.seqLength, output[1][1]:size(2),
-          self.opt.outputRes, self.opt.outputRes)
-      for j = 1, self.opt.seqLength do hmap[j]:copy(output[1][j][1]) end
-      if self.nOutput == 1 then
-        matio.save(pred_file, {hmap = hmap})
-      end
-      if self.nOutput == 5 then
-        local repos = torch.FloatTensor(self.opt.seqLength, output[2][1]:size(2), 3)
-        local trans = torch.FloatTensor(self.opt.seqLength, 3)
-        local focal = torch.FloatTensor(self.opt.seqLength, 1)
+    if eval then
+      local eval_path = paths.concat(self.opt.save,'eval_' .. split)
+      local eval_file = paths.concat(eval_path, string.format("%05d.mat" % index[1]))
+      makedir(eval_path)
+      if not paths.filep(eval_file) then
+        local center, scale = sample.center, sample.scale
+        local eval = torch.FloatTensor(self.opt.seqLength, output[1][1]:size(2), 2)
         for j = 1, self.opt.seqLength do
-          repos[j]:copy(output[2][j][1])
-          trans[j]:copy(output[3][j][1])
-          focal[j]:copy(output[4][j][1])
+          local pred
+          if self.nOutput == 1 then
+            pred = getPreds(output[1][j]:float())
+          end
+          if self.nOutput == 5 then
+            if self.opt.evalOut == 's3' then pred = output[5][j]:float() end
+            if self.opt.evalOut == 'hg' then pred = getPreds(output[1][j]:float()) end
+          end
+          eval[j] = self:getOrigCoord(pred,center,scale)[1]
         end
-        matio.save(pred_file, {hmap = hmap, repos = repos, trans = trans, focal = focal})
+        matio.save(eval_file, {eval = eval})
+      end
+    else
+      local pred_path = paths.concat(self.opt.save,'pred_' .. split)
+      local pred_file = paths.concat(pred_path, string.format("%05d.mat" % index[1]))
+      makedir(pred_path)
+      if not paths.filep(pred_file) then
+        local hmap = torch.FloatTensor(self.opt.seqLength, output[1][1]:size(2),
+            self.opt.outputRes, self.opt.outputRes)
+        for j = 1, self.opt.seqLength do hmap[j]:copy(output[1][j][1]) end
+        if self.nOutput == 1 then
+          matio.save(pred_file, {hmap = hmap})
+        end
+        if self.nOutput == 5 then
+          local repos = torch.FloatTensor(self.opt.seqLength, output[2][1]:size(2), 3)
+          local trans = torch.FloatTensor(self.opt.seqLength, 3)
+          local focal = torch.FloatTensor(self.opt.seqLength, 1)
+          for j = 1, self.opt.seqLength do
+            repos[j]:copy(output[2][j][1])
+            trans[j]:copy(output[3][j][1])
+            focal[j]:copy(output[4][j][1])
+          end
+          matio.save(pred_file, {hmap = hmap, repos = repos, trans = trans, focal = focal})
+        end
       end
     end
 
-    xlua.progress(i, dataloader:sizeSampled())
+    xlua.progress(i, size)
   end
   self:setModelMode('training')
 end
@@ -699,56 +744,50 @@ function Trainer:zeroGradParams()
   end
 end
 
-function Trainer:ignoreFrames(output, target)
-  -- Ignore frames with no visible joints
-  local keepInd = {}
-  for i = 1, target:size(1) do
-    if torch.any(target[i]:ne(0)) then
-      table.insert(keepInd, i)
+function Trainer:getOrigCoord(pred, center, scale)
+  for i = 1, pred:size(1) do
+    for j = 1, pred:size(2) do
+      pred[i][j] = transform(pred[i][j], center[i], scale[i][1], 0,
+          self.opt.outputRes, true, false)
     end
   end
-  if #keepInd ~= target:size(1) then
-    -- Return nan if all frames have no visible joints
-    if next(keepInd) == nil then
-      return 0/0, 0/0
-    end
-    local ind = torch.LongTensor(keepInd)
-    output = output:index(1, ind)
-    target = target:index(1, ind)
-  end
-  return output, target
+  return pred
 end
 
-function Trainer:computeError(output, target)
+function Trainer:getRef(scale)
+  if self.opt.dataset == 'penn-crop' then
+    return 200 * scale:view(-1) / 1.25
+  end
+end
+
+function Trainer:computeError(output, target, ref)
 -- target: N x d x 2
 -- output: N x d x 2
-  local output, target = self:ignoreFrames(output, target)
-  if output ~= output then
-    return 0/0
-  end
+-- ref:    N x 1
   local e, n = {}, {}
   for i = 1, target:size(1) do
     e[i], n[i] = 0.0, 0.0
     for j = 1, target:size(2) do
-      if target[i][j][1] > 0 then
+      if target[i][j][1] ~= 0 and target[i][j][2] ~= 0 then
         local p1 = target[i][j]
         local p2 = output[i][j]
         n[i] = n[i] + 1
-        e[i] = e[i] + torch.dist(p1,p2)
+        e[i] = e[i] + torch.dist(p1,p2) / ref[i]
       end
     end
   end
-  return torch.cdiv(torch.Tensor(e),torch.Tensor(n)):mean()
+  -- TODO: the code above can be made even simpler
+  return torch.Tensor(e):sum(), torch.Tensor(n):sum()
 end
 
-function Trainer:computeAccuracy(output, target)
+function Trainer:computeAccuracy(output, target, ref)
 -- target: N x d x 2
 -- output: N x d x 2
-  local output, target = self:ignoreFrames(output, target)
+-- ref:    N x 1
   if output ~= output then
     return 0/0
   end
-  return coordAccuracy(output, target, nil, nil, self.opt.outputRes)
+  return coordAccuracy(output, target, 0.05, nil, self.opt.outputRes, ref)
 end
 
 return M.Trainer

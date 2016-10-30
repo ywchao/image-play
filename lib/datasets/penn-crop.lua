@@ -15,7 +15,6 @@ function PennCropDataset:__init(opt, split)
   -- Load annotation
   annot_file = paths.concat(opt.data, split .. '.h5')
   self.ind2sub = hdf5.open(annot_file,'r'):read('ind2sub'):all()
-  self.visible = hdf5.open(annot_file,'r'):read('visible'):all()
   self.part = hdf5.open(annot_file,'r'):read('part'):all()
   -- Preprocess annotation
   self.seqId, self.nFrame = unpack(self:_preproAnno())
@@ -101,6 +100,7 @@ end
 function PennCropDataset:get(idx, train)
   local input, repos, trans, focal, hmap, proj = {}, {}, {}, {}, {}, {}
   local center, scale
+  local gtpts = {}
 
   local seqIdx = self:_getSeq(idx)
   for i = 1, seqIdx:numel() do
@@ -115,17 +115,16 @@ function PennCropDataset:get(idx, train)
     local inp = crop(img, center, scale, 0, self.inputRes)
     -- Get projection
     local pts = self.part[sid]
-    local vis = self.visible[sid]
     local pj = torch.zeros(pts:size())
     for j = 1, pts:size(1) do
-      if vis[j] == 1 then
+      if pts[j][1] ~= 0 and pts[j][2] ~= 0 then
         pj[j] = transform(pts[j], center, scale, 0, self.outputRes, false, false)
       end
     end
     -- Generate heatmap
     local hm = torch.zeros(pts:size(1), self.outputRes, self.outputRes)
     for j = 1, pts:size(1) do
-      if vis[j] == 1 then
+      if pts[j][1] ~= 0 and pts[j][2] ~= 0 then
         drawGaussian(hm[j], torch.round(pj[j]), 2)
       end
     end
@@ -135,6 +134,7 @@ function PennCropDataset:get(idx, train)
     focal[i] = torch.zeros(1)
     hmap[i] = hm
     proj[i] = pj
+    gtpts[i] = pts
   end
   -- Augment data
   if train then
@@ -166,6 +166,9 @@ function PennCropDataset:get(idx, train)
     focal = focal,
     hmap = hmap,
     proj = proj,
+    gtpts = gtpts,
+    center = center,
+    scale = scale,
   }
 end
 

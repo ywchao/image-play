@@ -37,9 +37,12 @@ for epoch = startEpoch, opt.nEpochs do
   checkpoints.save(epoch, model, trainer.optimState, nil, opt)
 end
 
--- Predict with the final model
-trainer:predict(loaders, 'train')
-trainer:predict(loaders, 'val')
+-- Predict with the final model (for eval)
+trainer:predict(loaders, 'val', true)
+
+-- Predict with the final model (for vis)
+trainer:predict(loaders, 'train', false)
+trainer:predict(loaders, 'val', false)
 
 -- Visualize prediction
 visualize.run(loaders, 'train', opt)

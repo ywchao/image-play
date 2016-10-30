@@ -103,24 +103,31 @@ function DataLoader:run(kwargs)
                local focal
                local hmap, hmapSize
                local proj, projSize
+               local gtpts, gtptsSize
+               local center
+               local scale
                for i, idx in ipairs(indices:totable()) do
                   local sample = _G.dataset:get(idx, kwargs.train)
                   if not input then
                      imageSize = sample.input[1]:size():totable()
                      reposSize = sample.repos[1]:size():totable()
                      transSize = sample.trans[1]:size():totable()
-                     focalSize = sample.focal[1]:size():totable()
                      hmapSize = sample.hmap[1]:size():totable()
                      projSize = sample.proj[1]:size():totable()
-                     input, repos, trans, focal, hmap, proj = {}, {}, {}, {}, {}, {}
+                     gtptsSize = sample.proj[1]:size():totable()
+                     input, repos, trans, focal, hmap, proj, gtpts, center, scale =
+                         {}, {}, {}, {}, {}, {}, {}, {}, {}
                      for j = 1, #sample.input do
                         input[j] = torch.FloatTensor(sz, unpack(imageSize))
                         repos[j] = torch.FloatTensor(sz, unpack(reposSize))
                         trans[j] = torch.FloatTensor(sz, unpack(transSize))
-                        focal[j] = torch.FloatTensor(sz, unpack(focalSize))
+                        focal[j] = torch.FloatTensor(sz, 1)
                         hmap[j] = torch.FloatTensor(sz, unpack(hmapSize))
                         proj[j] = torch.FloatTensor(sz, unpack(projSize))
+                        gtpts[j] = torch.FloatTensor(sz, unpack(gtptsSize))
                      end
+                     center = torch.FloatTensor(sz, 2)
+                     scale = torch.FloatTensor(sz, 1)
                   end
                   for j = 1, #input do
                      input[j][i] = sample.input[j]
@@ -129,7 +136,10 @@ function DataLoader:run(kwargs)
                      focal[j][i] = sample.focal[j]
                      hmap[j][i] = sample.hmap[j]
                      proj[j][i] = sample.proj[j]
+                     gtpts[j][i] = sample.gtpts[j]
                   end
+                  center[i] = sample.center
+                  scale[i] = sample.scale
                end
                collectgarbage()
                return {
@@ -140,6 +150,9 @@ function DataLoader:run(kwargs)
                   focal = focal,
                   hmap = hmap,
                   proj = proj,
+                  gtpts = gtpts,
+                  center = center,
+                  scale = scale,
                }
             end,
             function(_sample_)

@@ -7,7 +7,7 @@ function calcDists(preds, label, normalize)
     local diff = torch.Tensor(2)
     for i = 1,preds:size(1) do
         for j = 1,preds:size(2) do
-            if label[i][j][1] > 1 and label[i][j][2] > 1 then
+            if label[i][j][1] ~= 0 and label[i][j][2] ~= 0 then
                 dists[j][i] = torch.dist(label[i][j],preds[i][j])/normalize[i]
             else
                 dists[j][i] = -1
@@ -65,26 +65,36 @@ function heatmapAccuracy(output, label, thr, idxs, outputRes)
     return unpack(acc)
 end
 
-function coordAccuracy(output, label, thr, idxs, outputRes)
-    local dists = calcDists(output, label, torch.ones(output:size(1))*outputRes/10)
+function coordAccuracy(output, label, thr, idxs, outputRes, ref)
+    local dists = calcDists(output, label, ref)
     local acc = {}
     local avgAcc = 0.0
     local badIdxCount = 0
 
     if not idxs then
         for i = 1,dists:size(1) do
-            acc[i+1] = distAccuracy(dists[i])
+            acc[i+1] = distAccuracy(dists[i], thr)
             if acc[i+1] >= 0 then avgAcc = avgAcc + acc[i+1]
             else badIdxCount = badIdxCount + 1 end
         end
         acc[1] = avgAcc / (dists:size(1) - badIdxCount)
     else
         for i = 1,#idxs do
-            acc[i+1] = distAccuracy(dists[idxs[i]])
+            acc[i+1] = distAccuracy(dists[idxs[i]], thr)
             if acc[i+1] >= 0 then avgAcc = avgAcc + acc[i+1]
             else badIdxCount = badIdxCount + 1 end
         end
         acc[1] = avgAcc / (#idxs - badIdxCount)
     end
-    return unpack(acc)
+
+    local pos, tot
+    if not idxs then
+        tot = dists:ne(-1):sum()
+        pos = dists:le(thr):eq(dists:ne(-1)):sum()
+    else
+        local dist_  = dists:index(1,torch.LongTensor(idxs))
+        tot = dist_:ne(-1):sum()
+        pos = dist_:le(thr):eq(dist_:ne(-1)):sum()
+    end
+    return pos, tot, unpack(acc)
 end

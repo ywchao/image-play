@@ -52,24 +52,15 @@ def istrain(idx):
   s_ind = list_inds[idx,0]
   return list_anno[s_ind]['train'][0,0] == 1
 
-def location(idx):
-  s_ind = list_inds[idx,0]
-  w = list_anno[s_ind]['dimensions'][0,0]
-  h = list_anno[s_ind]['dimensions'][0,1]
-  x = (w+1)/2
-  y = (h+1)/2
-  scale = float(max(w,h))/200
-  return np.array([x, y]), scale
-
 def partinfo(idx):
   # Part location and visibility
   s_ind = list_inds[idx,0]
   f_ind = list_inds[idx,1]
   coords = np.zeros((13,2))
-  vis = np.zeros(13)
   for p_ind in xrange(13):
     if list_anno[s_ind]['visibility'][f_ind,p_ind] == 1:
       coords[p_ind,0] = list_anno[s_ind]['x'][f_ind,p_ind]
       coords[p_ind,1] = list_anno[s_ind]['y'][f_ind,p_ind]
-      vis[p_ind] = 1
-  return coords, vis
+      assert(coords[p_ind,0] != 0)
+      assert(coords[p_ind,1] != 0)
+  return coords

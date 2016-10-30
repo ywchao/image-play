@@ -22,7 +22,7 @@ valid_ind = read_file_lines(vind_file)
 valid_ind = [int(x) for x in valid_ind]
 
 # init variables
-keys = ['ind2sub','part','visible']
+keys = ['ind2sub','part']
 annot_tr = {k:[] for k in keys}
 annot_vl = {k:[] for k in keys}
 annot_ts = {k:[] for k in keys}
@@ -35,7 +35,7 @@ ts_h5 = op_dir + 'test.h5'
 
 for idx in xrange(penn.nimages):
   # Part annotations and visibility
-  coords,vis = penn.partinfo(idx)
+  coords = penn.partinfo(idx)
   # *** DO NOT SKIP FRAME ***
   # skip if no visible joints
   # 1. all joints
@@ -59,7 +59,6 @@ for idx in xrange(penn.nimages):
   # Add info to annotation list
   annot['ind2sub'] += [[s_ind,f_ind]]
   annot['part'] += [coords]
-  annot['visible'] += [vis]
 
   # Show progress
   print "images\rprocessed",idx+1,
@@ -69,10 +68,10 @@ print ""
 
 # generate h5 files
 if not os.path.isfile(tr_h5):
-  write_file_h5(tr_h5,annot_tr,'penn_action_cropped')
+  write_file_h5(tr_h5,annot_tr,'penn-crop')
 if not os.path.isfile(vl_h5):
-  write_file_h5(vl_h5,annot_vl,'penn_action_cropped')
+  write_file_h5(vl_h5,annot_vl,'penn-crop')
 if not os.path.isfile(ts_h5):
-  write_file_h5(ts_h5,annot_ts,'penn_action_cropped')
+  write_file_h5(ts_h5,annot_ts,'penn-crop')
 
 print "done."
