@@ -39,11 +39,14 @@ end
 
 -- Predict with the final model (for eval)
 trainer:predict(loaders, 'val', true)
+trainer:predict(loaders, 'test', true)
 
 -- Predict with the final model (for vis)
 trainer:predict(loaders, 'train', false)
 trainer:predict(loaders, 'val', false)
+trainer:predict(loaders, 'test', false)
 
 -- Visualize prediction
 visualize.run(loaders, 'train', opt)
 visualize.run(loaders, 'val', opt)
+visualize.run(loaders, 'test', opt)
