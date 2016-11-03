@@ -7,8 +7,8 @@ else
 fi
 
 CUDA_VISIBLE_DEVICES=$gpu_id th main.lua \
-  -expID pose-val-hg-256 \
-  -nThreads 1 \
+  -expID pose-est-hg-256 \
+  -nThreads 4 \
   -nEpochs 0 \
   -netType hg-256 \
   -seqLength 1 \

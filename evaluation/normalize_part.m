@@ -1,4 +1,4 @@
-function [ p, w, mu, sc ] = normalize_part( part, vis, mode )
+function [ p, c, mu, sc ] = normalize_part( part, vis, mode )
 % normalize using only visible joints
 
 if nargin < 3
@@ -6,9 +6,9 @@ if nargin < 3
 end
 
 % substract the x, y coordinates by mean
-w = sum(vis, 2);
+c = sum(vis, 2);
 p = part .* repmat(vis, [1 1 2]);
-mu = sum(p, 2) ./ repmat(w, [1 1 2]);
+mu = sum(p, 2) ./ repmat(c, [1 1 2]);
 p = p - repmat(mu, [1 size(part,2) 1]);
 p = p .* repmat(vis, [1 1 2]);
 
@@ -20,7 +20,7 @@ switch mode
         p = p ./ repmat(sc, [1 size(part,2) 2]);
     case 'var'
         % divid x, y coordinates by their variances separately
-        sc = sum(p.^2, 2) ./ repmat(w, [1 1 2]);
+        sc = sum(p.^2, 2) ./ repmat(c, [1 1 2]);
         p = p ./ repmat(sc, [1 size(part,2) 1]);
 end
 

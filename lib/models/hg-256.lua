@@ -4,8 +4,6 @@ M = {}
 
 -- Input variables
 local seqLength
-local hiddenSize
-local numLayers
 
 local function hourglass(n, f, inp)
   -- Upper branch
@@ -73,8 +71,6 @@ end
 function M.createModel(opt, outputDim)
   -- Set params
   seqLength = opt.seqLength
-  hiddenSize = opt.hiddenSize
-  numLayers = opt.numLayers
   outputRes = opt.outputRes
 
   -- Input
