@@ -1,19 +1,38 @@
 
 config;
 
-exp_name = 'hg-256';
+inp_name = 'hg-256';
 
 % split = 'val';
 % split = 'test';
 
+% feat_type = 1;  % skel
+% feat_type = 2;  % skel + caffenet
+% feat_type = 3;  % skel + oracle
+
 % set visibility threshold for training data
 % selected by maximizing validation accuracy
-param.thres_vis = 9;
+% param.thres_vis = 9;
+
+% set number of candidate images retrieved with caffe feature
+% selected by maximizing validation accuracy
+% param.K = 22500;
+
+% set parameters
+interval = 2;
 
 % set directories
-curr_dir = sprintf('exp/penn-crop/pose-est-%s/eval_%s/',exp_name,split);
-pred_dir = sprintf('exp/penn-crop/nn-skel-%s-th%02d/eval_%s/',exp_name,param.thres_vis,split);
-vis_root = sprintf('evaluation/vis_pred/nn-skel-%s-thres%02d/%s/',exp_name,param.thres_vis,split);
+switch feat_type
+    case 1
+        exp_name = sprintf('nn-skel-%s-th%02d',inp_name,param.thres_vis);
+    case 2
+        exp_name = sprintf('nn-skel-caffenet-%s-th%02d-K%05d',inp_name,param.thres_vis,param.K);
+    case 3
+        exp_name = sprintf('nn-skel-oracle-%s-th%02d',inp_name,param.thres_vis);
+end
+curr_dir = sprintf('exp/penn-crop/pose-est-%s/eval_%s/',inp_name,split);
+pred_dir = sprintf('exp/penn-crop/%s/eval_%s/',exp_name,split);
+vis_root = sprintf('evaluation/vis_pred/%s/%s/',exp_name,split);
 
 % set body joint config
 param.pa = [0 1 1 2 3 4 5 2 3 8 9 10 11];
@@ -36,11 +55,35 @@ dataset = penn_crop(opt, split);
 
 % get sampled indices
 sidx = dataset.getSampledIdx();
+sidx = sidx(1:interval:numel(sidx));
+
+% visualize first min(K,len) videos for each action
+K = 3;
+list_seq = dir('./data/Penn_Action_cropped/labels/*.mat');
+list_seq = {list_seq.name}';
+num_seq = numel(list_seq);
+action = cell(num_seq,1);
+for i = 1:num_seq
+    lb_file = ['./data/Penn_Action_cropped/labels/' list_seq{i}];
+    anno = load(lb_file);
+    assert(ischar(anno.action));
+    action{i} = anno.action;
+end
+[list_act,~,ia] = unique(action, 'stable');
+sid = dataset.getSeqFrId(sidx);
+seq = unique(sid);
+keep = false(numel(seq),1);
+for i = 1:numel(list_act)
+    ii = find(ismember(seq,find(ia == i)));
+    keep(ii(1:min(numel(ii),K))) = true;
+end
+seq = seq(keep);
+run = sidx(ismember(sid,seq));
 
 fprintf('starting visualizing nn skel ... \n');
-for i = 1:numel(sidx)
-    tic_print(sprintf('  %04d/%04d\n',i,numel(sidx)));
-    [sid, fid] = dataset.getSeqFrId(sidx(i));
+for i = run
+    tic_print(sprintf('  %04d/%04d\n',find(i == run),numel(run)))
+    [sid, fid] = dataset.getSeqFrId(i);
     
     % set vis dir and file
     vis_dir = [vis_root num2str(sid,'%04d') '/'];
@@ -54,12 +97,12 @@ for i = 1:numel(sidx)
     end
 
     % load current frame estimation
-    curr_file = sprintf('%s%05d.mat',curr_dir,sidx(i));
+    curr_file = sprintf('%s%05d.mat',curr_dir,i);
     curr = load(curr_file);
     curr = squeeze(curr.eval);
     
     % load prediction
-    pred_file = sprintf('%s%05d.mat',pred_dir,sidx(i));
+    pred_file = sprintf('%s%05d.mat',pred_dir,i);
     pred = load(pred_file);
     nn_sid = pred.sid;
     nn_fid = pred.fid;

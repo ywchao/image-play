@@ -1,15 +1,33 @@
 
-exp_name = 'hg-256';
+inp_name = 'hg-256';
 
 % split = 'val';
 % split = 'test';
 
+% feat_type = 1;  % skel
+% feat_type = 2;  % skel + caffenet
+% feat_type = 3;  % skel + oracle
+
 % set visibility threshold for training data
 % selected by maximizing validation accuracy
-param.thres_vis = 9;
+% param.thres_vis = 9;
+
+% set number of candidate images retrieved with caffe feature
+% selected by maximizing validation accuracy
+% param.K = 22500;
+
+feat_root = 'caffe-feat/exp/penn-crop/bvlc_reference_caffenet/';
 
 % set save directory
-save_dir = sprintf('exp/penn-crop/nn-skel-%s-th%02d/eval_%s/',exp_name,param.thres_vis,split);
+switch feat_type
+    case 1
+        exp_name = sprintf('nn-skel-%s-th%02d',inp_name,param.thres_vis);
+    case 2
+        exp_name = sprintf('nn-skel-caffenet-%s-th%02d-K%05d',inp_name,param.thres_vis,param.K);
+    case 3
+        exp_name = sprintf('nn-skel-oracle-%s-th%02d',inp_name,param.thres_vis);
+end
+save_dir = sprintf('exp/penn-crop/%s/eval_%s/',exp_name,split);
 makedir(save_dir);
 
 % load training data
@@ -42,6 +60,32 @@ opt.outputRes = 64;
 dataset_tr = penn_crop(opt, 'train');
 dataset_ts = penn_crop(opt, split);
 
+% load caffe features and compute distance
+if feat_type == 2
+    feat_file = [feat_root 'feat_train.mat'];
+    ld = load(feat_file);
+    tr.feat = ld.feat;
+    tr.feat(is_rm, :, :) = [];
+    feat_file = [feat_root 'feat_' split '.mat'];
+    ld = load(feat_file);
+    ts.feat = ld.feat;
+end
+
+% get action category
+if feat_type == 3
+    list_seq = dir('./data/Penn_Action_cropped/labels/*.mat');
+    list_seq = {list_seq.name}';
+    num_seq = numel(list_seq);
+    action = cell(num_seq,1);
+    for i = 1:num_seq
+        lb_file = ['./data/Penn_Action_cropped/labels/' list_seq{i}];
+        anno = load(lb_file);
+        assert(ischar(anno.action));
+        action{i} = anno.action;
+    end
+    [list_act,~,ia] = unique(action, 'stable');
+end
+
 fprintf('running nn skel ... \n');
 for i = 1:dataset_ts.size()
     tic_print(sprintf('  %04d/%04d\n',i,dataset_ts.size()));
@@ -53,7 +97,7 @@ for i = 1:dataset_ts.size()
     end
     
     % load estimated pose
-    pred_file = sprintf('./exp/penn-crop/pose-est-%s/eval_%s/%05d.mat',exp_name,split,i);
+    pred_file = sprintf('./exp/penn-crop/pose-est-%s/eval_%s/%05d.mat',inp_name,split,i);
     pred = load(pred_file);
     pred = pred.eval;
         
@@ -63,7 +107,21 @@ for i = 1:dataset_ts.size()
     assert(all(pr_part(repmat(tr.visible,[1 1 2]) == 0) == 0) == 1);
     
     % find nearest neighbor in training set and compute pred mse
-    mse_all = sum(sum((pr_part - tr.part) .^ 2,3),2) ./ tr.c;
+    switch feat_type
+        case 1
+            mse_all = sum(sum((pr_part - tr.part) .^ 2,3),2) ./ tr.c;
+        case 2
+            dist = sum((repmat(ts.feat(i,:),[numel(tr.id),1]) - tr.feat) .^ 2,2);
+            [~, ii] = sort(dist,'ascend');
+            mse_all = sum(sum((pr_part - tr.part) .^ 2,3),2) ./ tr.c;
+            mse_all(ii(param.K+1:end)) = Inf;
+        case 3
+            sid = dataset_ts.getSeqFrId(i);
+            aid = ia(sid);
+            match = ia(anno_tr.ind2sub(tr.id,1)) == aid;
+            mse_all = sum(sum((pr_part - tr.part) .^ 2,3),2) ./ tr.c;
+            mse_all(match == 0) = Inf;
+    end
     [mse, ind_nn] = min(mse_all);
     
     % load training image with nn pose
