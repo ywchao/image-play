@@ -112,7 +112,7 @@ function Trainer:train(epoch, loaders)
     if self.nOutput == 1 then target = hmap end
 
     -- Init output
-    local loss, err, acc, num = {}, {}, {}, {}
+    local loss, err, acc = {}, {}, {}
 
     -- Single nngraph model
     if torch.type(self.model) == 'nn.gModule' then
@@ -166,7 +166,6 @@ function Trainer:train(epoch, loaders)
           loss[j] = 0/0
           err[j] = 0/0
           acc[j] = 0/0
-          num[j] = 0/0
         end
       end
       acc = torch.Tensor(acc)
@@ -647,7 +646,21 @@ function Trainer:predict(loaders, split, eval)
             trans[j]:copy(output[3][j][1])
             focal[j]:copy(output[4][j][1])
           end
-          matio.save(pred_file, {hmap = hmap, repos = repos, trans = trans, focal = focal})
+          -- Post-processing
+          local trans_ = trans:clone()
+          local repos_ = repos:clone()
+          local focal_ = focal:clone()
+          local f = focal[1][1]
+          for j = 2, self.opt.seqLength do
+            local factor = f / focal[j][1]
+            trans[j]:mul(factor)
+            repos[j]:mul(factor)
+            focal[j][1] = f
+          end
+          matio.save(pred_file, {hmap = hmap,
+              repos_ = repos_, repos = repos,
+              trans_ = trans_, trans = trans,
+              focal_ = focal_, focal = focal})
         end
       end
     end
@@ -784,9 +797,6 @@ function Trainer:computeAccuracy(output, target, ref)
 -- target: N x d x 2
 -- output: N x d x 2
 -- ref:    N x 1
-  if output ~= output then
-    return 0/0
-  end
   return coordAccuracy(output, target, 0.05, nil, self.opt.outputRes, ref)
 end
 

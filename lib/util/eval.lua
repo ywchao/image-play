@@ -92,7 +92,7 @@ function coordAccuracy(output, label, thr, idxs, outputRes, ref)
         tot = dists:ne(-1):sum()
         pos = dists:le(thr):eq(dists:ne(-1)):sum()
     else
-        local dist_  = dists:index(1,torch.LongTensor(idxs))
+        local dist_ = dists:index(1,torch.LongTensor(idxs))
         tot = dist_:ne(-1):sum()
         pos = dist_:le(thr):eq(dist_:ne(-1)):sum()
     end
