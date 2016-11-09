@@ -6,11 +6,12 @@ addpath('skeleton2d3d/H36M_utils/external_utils');
 addpath('skeleton2d3d/H36M_utils/external_utils/lawrennd-mocap');
 addpath('skeleton2d3d/H36M_utils/external_utils/xml_io_tools');
 
-% expID = 'seq16-hg-256-res-clstm-base16';  mode = 0;
-% expID = 'seq16-hg-256-res-clstm-res-64-base16-w1e-6';  mode = 1;
+% expID = 'seq16-hg-256-res-clstm';  mode = 0;
+% expID = 'seq16-hg-256-res-clstm-res-64-w1e-7';  mode = 1;
 
 % split = 'train';
 % split = 'val';
+% split = 'test';
 
 % set parameters
 interval = 2;
@@ -21,8 +22,13 @@ vis_root = ['./outputs/vis_preds_penn/' expID '/' split '/'];
 % load posSkel
 db = H36MDataBase.instance();
 posSkel = db.getPosSkel();
+pos2dSkel = posSkel;
+for i = 1 :length(pos2dSkel.tree)
+    pos2dSkel.tree(i).posInd = [(i-1)*2+1 i*2];
+end
 Features{1} = H36MPose3DPositionsFeature();
 [~, posSkel] = Features{1}.select(zeros(0,96), posSkel, 'body');
+[~, pos2dSkel] = Features{1}.select(zeros(0,64), pos2dSkel, 'body');
 
 % init camera
 CameraVertex = zeros(5,3);
@@ -72,12 +78,12 @@ run = sidx(ismember(sid,seq));
 % init figure
 figure(1);
 if mode == 0
-    set(gcf,'Position',[2 26 610 330]);
+    set(gcf,'Position',[2 26 915 330]);
 end
 if mode == 1
-    set(gcf,'Position',[2 26 1830 330]);
+    set(gcf,'Position',[2 26 2135 330]);
 end
-clear hi hh hs1 hs2 hr1 hr2
+clear hi hh hp hs1 hs2 hr1 hr2
 
 % load libraries
 libimg = ip_img();
@@ -90,11 +96,11 @@ for i = run
     vis_dir = [vis_root num2str(sid,'%04d') '/'];
     makedir(vis_dir);
     % load predictions
+    joints = [10,15,12,16,13,17,14,2,5,3,6,4,7];
     pred_file = sprintf('./exp/penn-crop/%s/pred_%s/%05d.mat',expID,split,i);
     preds = load(pred_file);
     hmap = preds.hmap;
     if mode == 1
-        joints = [10,15,12,16,13,17,14,2,5,3,6,4,7];
         repos = zeros(opt.seqLength,17,3);
         repos(:,joints,:) = preds.repos;
         repos(:,1,:) = (preds.repos(:,8,:) + preds.repos(:,9,:))/2;
@@ -105,8 +111,18 @@ for i = run
         trans = preds.trans;
         focal = preds.focal;
     end
+    if exist(sprintf('./exp/penn-crop/%s/eval_%s/',expID,split),'dir')
+        eval_file = sprintf('./exp/penn-crop/%s/eval_%s/%05d.mat',expID,split,i);
+        preds = load(eval_file);
+        pred2 = zeros(opt.seqLength,17,2);
+        pred2(:,joints,:) = preds.eval;
+        pred2(:,1,:) = (preds.eval(:,8,:) + preds.eval(:,9,:))/2;
+        pred2(:,8,:) = (preds.eval(:,2,:) + preds.eval(:,3,:) + preds.eval(:,8,:) + preds.eval(:,9,:))/4;
+        pred2(:,9,:) = (preds.eval(:,1,:) + preds.eval(:,2,:) + preds.eval(:,3,:))/3;
+        pred2(:,11,:) = preds.eval(:,1,:);
+    end
     % load input
-    [input, ~, ~, ~] = dataset.get(i);
+    [input, ~, ~, ~, ~, ~] = dataset.get(i);
     input = permute(input,[1,3,4,2]);
     for j = 1:opt.seqLength
         % skip if figure exists
@@ -121,10 +137,10 @@ for i = run
             delete(hi);
         end
         if mode == 0
-            hi = subplot('Position',[0.00+0/2 0.00 1/2-0.00 1.00]);
+            hi = subplot('Position',[0.00+0/3 0.00 1/3-0.00 1.00]);
         end
         if mode == 1
-            hi = subplot('Position',[0.00+0/6 0.00 1/6-0.00 1.00]);
+            hi = subplot('Position',[0.00+0/7 0.00 1/7-0.00 1.00]);
         end
         imshow(im); hold on;
         % draw heatmap
@@ -132,10 +148,10 @@ for i = run
             delete(hh);
         end
         if mode == 0
-            hh = subplot('Position',[0.00+1/2 0.00 1/2-0.00 1.00]);
+            hh = subplot('Position',[0.00+1/3 0.00 1/3-0.00 1.00]);
         end
         if mode == 1
-            hh = subplot('Position',[0.00+1/6 0.00 1/6-0.00 1.00]);
+            hh = subplot('Position',[0.00+1/7 0.00 1/7-0.00 1.00]);
         end
         hm = squeeze(hmap(j,:,:,:));
         ip = squeeze(input(1,:,:,:));
@@ -149,6 +165,21 @@ for i = run
         totalHm = permute(totalHm,[2 3 1]);
         totalHm = uint8(totalHm);
         imshow(totalHm);
+        % show projected 2D skeleton
+        if exist(sprintf('./exp/penn-crop/%s/eval_%s/',expID,split),'dir')
+            if exist('hp','var')
+                delete(hp);
+            end
+            if mode == 0
+                hp = subplot('Position',[0.00+2/3 0.00 1/3-0.00 1.00]);
+            end
+            if mode == 1
+                hp = subplot('Position',[0.00+2/7 0.00 1/7-0.00 1.00]);
+            end
+            imshow(im); hold on;
+            show2DPose(permute(pred2(j,:,:),[3 2 1]),pos2dSkel);
+            axis off;
+        end
         if mode == 0
             % save figure
             set(gcf,'PaperPositionMode','auto');
@@ -161,13 +192,13 @@ for i = run
                 if exist('hs1','var')
                     delete(hs1);
                 end
-                hs1 = subplot('Position',[0.03+2/6 0.07 1/6-0.04 0.93]);
+                hs1 = subplot('Position',[0.03+3/7 0.07 1/7-0.04 0.93]);
             end
             if k == 2
                 if exist('hs2','var')
                     delete(hs2);
                 end
-                hs2 = subplot('Position',[0.02+3/6 0.07 1/6-0.03 0.93]);
+                hs2 = subplot('Position',[0.02+4/7 0.07 1/7-0.03 0.93]);
             end
             set(gca,'fontsize',6);
             pred = permute(repos(j,:,:),[2 3 1]);
@@ -214,13 +245,13 @@ for i = run
                 if exist('hr1','var')
                     delete(hr1);
                 end
-                hr1 = subplot('Position',[0.02+4/6 0.07 1/6-0.035 0.93]);
+                hr1 = subplot('Position',[0.02+5/7 0.07 1/7-0.035 0.93]);
             end
             if k == 2
                 if exist('hr2','var')
                     delete(hr2);
                 end
-                hr2 = subplot('Position',[0.02+5/6 0.07 1/6-0.035 0.93]);
+                hr2 = subplot('Position',[0.02+6/7 0.07 1/7-0.035 0.93]);
             end
             set(gca,'fontsize',6);
             pred = permute(repos(j,:,:),[2 3 1]);
