@@ -14,6 +14,10 @@ dataset = 'penn-crop';
 % exp_name = 'seq16-hg-256-res-clstm-res-64-base16-w1e-7';
 % exp_name = 'seq16-hg-256-res-clstm-res-64-base16-w1e-6';
 % exp_name = 'seq16-hg-256-res-clstm-res-64-base16-w1e-5';
+% exp_name = 'seq16-hg-256-res-clstm-res-64-w1e-8';
+% exp_name = 'seq16-hg-256-res-clstm-res-64-w1e-7';
+% exp_name = 'seq16-hg-256-res-clstm-res-64-w1e-6';
+% exp_name = 'seq16-hg-256-res-clstm-res-64-w1e-5';
 % epoch_size = 26253;
 % disp_int = 1500;
 
@@ -21,6 +25,10 @@ dataset = 'penn-crop';
 % exp_name = 'seq16-hg-256-res-clstm-res-64-fts3-hg-base16-w1e-7';
 % exp_name = 'seq16-hg-256-res-clstm-res-64-fts3-hg-base16-w1e-6';
 % exp_name = 'seq16-hg-256-res-clstm-res-64-fts3-hg-base16-w1e-5';
+% exp_name = 'seq16-hg-256-res-clstm-res-64-fts3-hg-w1e-8';
+% exp_name = 'seq16-hg-256-res-clstm-res-64-fts3-hg-w1e-7';
+% exp_name = 'seq16-hg-256-res-clstm-res-64-fts3-hg-w1e-6';
+% exp_name = 'seq16-hg-256-res-clstm-res-64-fts3-hg-w1e-5';
 % epoch_size = 26253;
 % disp_int = 1500;
 
@@ -44,7 +52,7 @@ dataset = 'penn-crop';
 
 % set parameters
 % max_epoch = 1;
-% max_epoch = 16;
+% max_epoch = 4;
 
 seq_length = 16;
 format = ['%s %s %s %s' repmat(' %s %s %s',[1,seq_length])];
@@ -178,6 +186,7 @@ grid on;
 title('validation accuracy');
 xlabel('iteration');
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+sum(acc(16,:))
 
 fprintf('it      loss      err     acc\n')
 for i = 1:seq_length

@@ -7,7 +7,7 @@ addpath('skeleton2d3d/H36M_utils/external_utils/lawrennd-mocap');
 addpath('skeleton2d3d/H36M_utils/external_utils/xml_io_tools');
 
 % expID = 'seq16-hg-256-res-clstm';  mode = 0;
-% expID = 'seq16-hg-256-res-clstm-res-64-w1e-7';  mode = 1;
+% expID = 'seq16-hg-256-res-clstm-res-64-w1e-6';  mode = 1;
 
 % split = 'train';
 % split = 'val';
