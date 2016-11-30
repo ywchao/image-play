@@ -8,3 +8,7 @@
 [submodule "caffe-feat/caffe"]
 	path = caffe-feat/caffe
 	url = https://github.com/BVLC/caffe.git
+[submodule "Deep3DPose"]
+	path = Deep3DPose
+	url = https://github.com/ywchao/Deep3DPose.git
+	branch = image-play
