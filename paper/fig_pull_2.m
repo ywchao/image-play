@@ -25,9 +25,9 @@ Features{1} = H36MPose3DPositionsFeature();
 [~, posSkel] = Features{1}.select(zeros(0,96), posSkel, 'body');
 [~, pos2dSkel] = Features{1}.select(zeros(0,64), pos2dSkel, 'body');
 
-% left leg/right arm
+% l-leg/r-arm (up)
 pos2dSkel_lr = pos2dSkel;
-% right leg/right arm
+% r-leg/r-arm (up)
 pos2dSkel_rr = pos2dSkel;
 tmp = pos2dSkel_rr.tree(2:4);
 pos2dSkel_rr.tree(2:4) = pos2dSkel_rr.tree(5:7);
@@ -40,7 +40,7 @@ pos2dSkel_rr.tree(2).children = 3;
 pos2dSkel_rr.tree(3).children = 4;
 pos2dSkel_rr.tree(5).children = 6;
 pos2dSkel_rr.tree(6).children = 7;
-% left leg/left arm
+% l-leg/l-arm (up)
 pos2dSkel_ll = pos2dSkel;
 tmp = pos2dSkel_ll.tree(12:14);
 pos2dSkel_ll.tree(12:14) = pos2dSkel_ll.tree(15:17);
@@ -53,7 +53,7 @@ pos2dSkel_ll.tree(12).children = 13;
 pos2dSkel_ll.tree(13).children = 14;
 pos2dSkel_ll.tree(15).children = 16;
 pos2dSkel_ll.tree(16).children = 17;
-% left leg/right arm
+% r-leg/l-arm (up)
 pos2dSkel_rl = pos2dSkel_rr;
 tmp = pos2dSkel_rl.tree(12:14);
 pos2dSkel_rl.tree(12:14) = pos2dSkel_rl.tree(15:17);
