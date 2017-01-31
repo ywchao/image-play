@@ -66,7 +66,7 @@ else
         dist{i} = zeros(dataset.size(),num_pt);
     end
     fprintf('computing dist ... \n');
-    for i = 1:dataset.size();
+    for i = 1:dataset.size()
         tic_print(sprintf('  %05d/%05d\n',i,dataset.size()));
         % load annotation
         sid = dataset.getSeqFrId(i);
@@ -101,10 +101,13 @@ else
 end
 
 % print acc
+eq_inf = cell(opt.seqLength,1);
 th = 0.05;
 for i = 1:opt.seqLength
     d = dist{i}(~isnan(dist{i}));
-    d = d(:);
+    % remove un-annotated joints for NN baselines
+    eq_inf{i} = isinf(d);
+    d(eq_inf{i}) = [];
     err = mean(d(~isinf(d)));
     acc = 100 * mean(d < th);
     fprintf('fr %02d  err: %7.5f  acc: %5.2f %%\n',i,err,acc);
@@ -123,10 +126,6 @@ for i = 1:opt.seqLength
     % dist{i} = dist{i}(:,[ 8  9]);  % hip
     % dist{i} = dist{i}(:,[10 11]);  % knee
     % dist{i} = dist{i}(:,[12 13]);  % ankle
-
-    % act = 7;  % jump_rope
-    % act = 8;  % jumping_jacks
-    % dist{i} = dist{i}(aid == act,:);
     
     % mean over all joints
     d = dist{i}(~isnan(dist{i}));
@@ -174,3 +173,109 @@ end
 
 % set(gcf,'PaperPositionMode','auto');
 % print(gcf,'outputs/pck.pdf','-dpdf');
+
+
+
+% % breakdown by action categories
+% 
+% % load action label
+% annot_file = fullfile(opt.data, [split '.h5']);
+% ind2sub = permute(hdf5read(annot_file,'ind2sub'),[2 1]);
+% [list_seq,~,ii] = unique(ind2sub(:,1));
+% num_seq = numel(list_seq);
+% action = cell(num_seq,1);
+% for i = 1:num_seq
+%     lb_file = [lbdata_root num2str(list_seq(i),'%04d') '.mat'];
+%     anno = load(lb_file);
+%     action{i} = anno.action;
+% end
+% [list_act,~,ia] = unique(action, 'stable');
+% aid = ia(ii);
+% 
+% % print per action acc
+% th = 0.05;
+% fprintf('                 ');
+% for i = 1:opt.seqLength
+%     fprintf('fr %02d   ',i);
+% end
+% fprintf('\n');
+% for a = 1:numel(list_act)
+%     fprintf('%15s  ',list_act{a})
+%     for i = 1:opt.seqLength
+%         d = dist{i}(aid == a,:);
+%         d = d(~isnan(d));
+%         acc = 100 * mean(d < th);
+%         fprintf('%5.2f %% ',acc);
+%     end
+%     fprintf('\n');
+% end
+% fprintf('\n');
+% 
+% % print per action acc sum
+% range = 0:0.01:0.1;
+% 
+% acc = zeros(opt.seqLength,numel(list_act),numel(range));
+% 
+% for i = 1:opt.seqLength
+%     for a = 1:numel(list_act)
+%         d = dist{i}(aid == a,:);
+%         d = d(~isnan(d));
+%         for j = 1:numel(range)
+%             acc(i,a,j) = 1 * mean(d < range(j));
+%         end
+%     end
+% end
+% fprintf('                 ');
+% fprintf('sum      ');
+% fprintf('max@0.05 ');
+% fprintf('min@0.05 ');
+% fprintf('d@0.05   ');
+% fprintf('\n');
+% for a = 1:numel(list_act)
+%     fprintf('%15s  ',list_act{a});
+%     fprintf('%7.2f  ',sum(sum(acc(:,a,:))) * 100);
+%     fprintf('%5.2f %%  ',max(acc(:,a,range == 0.05)) * 100);
+%     fprintf('%5.2f %%  ',min(acc(:,a,range == 0.05)) * 100);
+%     fprintf('%5.2f %%  ',max(acc(:,a,range == 0.05)) * 100 - min(acc(:,a,range == 0.05)) * 100);
+%     fprintf('\n');
+% end
+% 
+% % print pck curve
+% clr = { ...
+%     [     0         0    1.0000], ...
+%     [1.0000         0         0], ...
+%     [     0    1.0000         0], ...
+%     [     0         0    0.1724], ...
+%     [1.0000    0.1034    0.7241], ...
+%     [1.0000    0.8276         0], ...
+%     [     0    0.3448         0], ...
+%     [0.5172    0.5172    1.0000], ...
+%     [0.6207    0.3103    0.2759], ...
+%     [     0    1.0000    0.7586], ...
+%     [     0    0.5172    0.5862], ...
+%     [     0         0    0.4828], ...
+%     [0.5862    0.8276    0.3103], ...
+%     [0.9655    0.6207    0.8621], ...
+%     [0.8276    0.0690    1.0000] ...
+%     };
+% clf;
+% set(gcf,'Position',[2 26 1468 1468]);
+% for i = 1:opt.seqLength
+%     row = ceil(i/4);
+%     col = mod(i-1,4)+1;
+%     subplot('Position',[(col-1)/4+0.02 (-row+4)/4+0.025 1/4-0.03 1/4-0.055]);
+%     set(gca,'fontsize',6);
+%     for a = 1:numel(list_act)
+%         plot(range,squeeze(acc(i,a,:)),'color',clr{a},'LineStyle','-','LineWidth',1);
+%         hold on;
+%     end
+%     if i == 1
+%         hl = legend(cellfun(@(x)strrep(x,'_',' '),list_act,'UniformOutput',false), ...
+%             'Location','southeast');
+%         set(hl,'FontSize',6);
+%     end
+%     grid on;
+%     axis([0 0.1 0 1]);
+%     set(gca,'xtick',0:0.02:0.1);
+%     title(sprintf('t = %2d',i));
+% end
