@@ -101,13 +101,13 @@ else
 end
 
 % print acc
-eq_inf = cell(opt.seqLength,1);
+% eq_inf = cell(opt.seqLength,1);
 th = 0.05;
 for i = 1:opt.seqLength
     d = dist{i}(~isnan(dist{i}));
-    % remove un-annotated joints for NN baselines
-    eq_inf{i} = isinf(d);
-    d(eq_inf{i}) = [];
+    % % remove un-annotated joints for NN baselines
+    % eq_inf{i} = isinf(d);
+    % d(eq_inf{i}) = [];
     err = mean(d(~isinf(d)));
     acc = 100 * mean(d < th);
     fprintf('fr %02d  err: %7.5f  acc: %5.2f %%\n',i,err,acc);
