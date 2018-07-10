@@ -3,8 +3,8 @@ import numpy as np
 import scipy.io
 
 # Load in annotations
-frame_root = './data/Penn_Action_cropped/frames/'
-label_root = './data/Penn_Action_cropped/labels/'
+frame_root = './data/penn-crop/frames/'
+label_root = './data/penn-crop/labels/'
 
 def list_dir(path, ext):
   list_file = [f for f in os.listdir(path) if f.endswith(ext)]

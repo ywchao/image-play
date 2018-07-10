@@ -17,7 +17,7 @@ def write_file_h5(file,dict,attrs):
       f[k] = np.array(dict[k])
 
  # read valid ind (one-based)
-vind_file = './data/Penn_Action_cropped/valid_ind.txt'
+vind_file = './data/penn-crop/valid_ind.txt'
 valid_ind = read_file_lines(vind_file)
 valid_ind = [int(x) for x in valid_ind]
 
@@ -28,7 +28,7 @@ annot_vl = {k:[] for k in keys}
 annot_ts = {k:[] for k in keys}
  
 # set outputs
-op_dir = './data/Penn_Action_cropped/'
+op_dir = './data/penn-crop/'
 tr_h5 = op_dir + 'train.h5'
 vl_h5 = op_dir + 'val.h5'
 ts_h5 = op_dir + 'test.h5'

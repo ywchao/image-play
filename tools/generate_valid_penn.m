@@ -1,8 +1,9 @@
 
-config;
+frame_root = './external/Penn_Action/frames/';
+label_root = './external/Penn_Action/labels/';
 
 valid_ratio = 0.092;
-output_file = './data/Penn_Action_cropped/valid_ind.txt';
+output_file = './data/penn-crop/valid_ind.txt';
 
 list_seq = dir([label_root '*.mat']);
 list_seq = {list_seq.name}';

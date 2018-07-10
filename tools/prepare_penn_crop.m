@@ -1,5 +1,9 @@
 
-config;
+frame_root = './external/Penn_Action/frames/';
+label_root = './external/Penn_Action/labels/';
+
+frdata_root = './data/penn-crop/frames/';
+lbdata_root = './data/penn-crop/labels/';
 
 % get list of sequences
 list_seq = dir([label_root '*.mat']);
