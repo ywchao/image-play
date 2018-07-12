@@ -1,18 +1,18 @@
-% generate cropped dataset by running prepare_cropped_data.m first
 
-config;
+frdata_root = './data/penn-crop/frames/';
+lbdata_root = './data/penn-crop/labels/';
 
 n_phase = 16;
 
 % get list of sequences
-list_seq = dir([label_root '*.mat']);
+list_seq = dir([lbdata_root '*.mat']);
 list_seq = {list_seq.name}';
 num_seq = numel(list_seq);
 
-vis_root = './outputs/dataset_vis_cropped/action_phase/';
+vis_root = './outputs/vis_action_phase/';
 
 % reading annotations
-fprintf('visualizing action phases ... \n');
+fprintf('visualizing action phase ... \n');
 for i = 1:num_seq
     tic_print(sprintf('  %04d/%04d\n',i,num_seq));
     % read frames in sequence
@@ -21,7 +21,7 @@ for i = 1:num_seq
     list_fr = dir([fr_dir '*.jpg']);
     list_fr = {list_fr.name}';
     % load annotation
-    lb_file = [label_root list_seq{i}];
+    lb_file = [lbdata_root list_seq{i}];
     anno = load(lb_file);
     assert(anno.nframes == numel(list_fr));
     % make directory
