@@ -87,7 +87,6 @@ function M.run(loaders, split, opt, seqlen)
 
   local Dataset = require('lib/datasets/' .. opt.dataset)
   local dataset = Dataset(opt, split)
-  local sidx = dataset:getSampledIdx()
 
   local dataloader = loaders[split]
   local vis_root = paths.concat(opt.save, 'preds_' .. split .. '_vis')
@@ -103,7 +102,7 @@ function M.run(loaders, split, opt, seqlen)
     assert(input[1]:size(1) == 1, 'batch size must be 1 with run({pred_true})')
     -- Get sid and fid; the current code might be exclusive to penn-crop;
     -- need customization for different datasets later
-    local sid, fid = dataset:getSeqFrId(sidx[i])
+    local sid, fid = dataset:getSeqFrId(index[1])
 
     -- Load predictions
     local pred_path = paths.concat(opt.save,'pred_' .. split)
@@ -125,8 +124,6 @@ function M.run(loaders, split, opt, seqlen)
       local inp = input[1][1]
 
       -- Get heatmap
-      local idx = find(sidx, index[1])
-      assert(idx:numel() == 1, 'index not found')
       local hm = pred.hmap[j]:clone()
       hm[hm:lt(0)] = 0
 
