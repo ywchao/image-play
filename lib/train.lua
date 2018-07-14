@@ -613,18 +613,20 @@ function Trainer:predict(loaders, split, eval)
       if not paths.filep(eval_file) then
         local center, scale = sample.center, sample.scale
         local eval = torch.FloatTensor(self.opt.seqLength, output[1][1]:size(2), 2)
+        local conf = torch.FloatTensor(self.opt.seqLength, output[1][1]:size(2), 1)
         for j = 1, self.opt.seqLength do
-          local pred
+          local pred, prob
           if self.nOutput == 1 then
-            pred = getPreds(output[1][j]:float())
+            pred, prob = getPreds(output[1][j]:float())
           end
           if self.nOutput == 5 then
-            if self.opt.evalOut == 's3' then pred = output[5][j]:float() end
-            if self.opt.evalOut == 'hg' then pred = getPreds(output[1][j]:float()) end
+            if self.opt.evalOut == 's3' then pred = output[5][j]:float(); prob = 0 end
+            if self.opt.evalOut == 'hg' then pred, prob = getPreds(output[1][j]:float()) end
           end
           eval[j] = self:getOrigCoord(pred,center,scale)[1]
+          conf[j] = prob
         end
-        matio.save(eval_file, {eval = eval})
+        matio.save(eval_file, {eval = eval, conf = conf})
       end
     else
       local pred_path = paths.concat(self.opt.save,'pred_' .. split)
