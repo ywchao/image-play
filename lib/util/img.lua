@@ -1,8 +1,12 @@
+require 'image'
+
+local M = {}
+
 -------------------------------------------------------------------------------
 -- Coordinate transformation
 -------------------------------------------------------------------------------
 
-function getTransform(center, scale, rot, res)
+function M.getTransform(center, scale, rot, res)
     local h = 200 * scale
     local t = torch.eye(3)
 
@@ -38,14 +42,15 @@ function getTransform(center, scale, rot, res)
     return t
 end
 
--- function transform(pt, center, scale, rot, res, invert)
--- function transform(pt, center, scale, rot, res, invert, int)
-function transform(pt, center, scale, rot, res, invert, round)
+
+-- function M.transform(pt, center, scale, rot, res, invert)
+-- function M.transform(pt, center, scale, rot, res, invert, int)
+function M.transform(pt, center, scale, rot, res, invert, round)
     local pt_ = torch.ones(3)
     -- pt_[1],pt_[2] = pt[1]-1,pt[2]-1
     pt_[1],pt_[2] = pt[1],pt[2]
 
-    local t = getTransform(center, scale, rot, res)
+    local t = M.getTransform(center, scale, rot, res)
     if invert then
         t = torch.inverse(t)
     end
@@ -67,9 +72,9 @@ end
 -- Cropping
 -------------------------------------------------------------------------------
 
-function crop(img, center, scale, rot, res)
-    local ul = transform({1,1}, center, scale, 0, res, true)
-    local br = transform({res+1,res+1}, center, scale, 0, res, true)
+function M.crop(img, center, scale, rot, res)
+    local ul = M.transform({1,1}, center, scale, 0, res, true)
+    local br = M.transform({res+1,res+1}, center, scale, 0, res, true)
 
     local pad = math.floor(torch.norm((ul - br):float())/2 - (br[1]-ul[1])/2)
     if rot ~= 0 then
@@ -115,7 +120,7 @@ function crop(img, center, scale, rot, res)
     return newImg
 end
 
-function compileImages(imgs, nrows, ncols, res)
+function M.compileImages(imgs, nrows, ncols, res)
     -- Assumes the input images are all square/the same resolution
     local totalImg = torch.zeros(3,nrows*res,ncols*res)
     for i = 1,#imgs do
@@ -130,7 +135,7 @@ end
 -- Draw gaussian
 -------------------------------------------------------------------------------
 
-function drawGaussian(img, pt, sigma)
+function M.drawGaussian(img, pt, sigma)
     -- Draw a 2D gaussian
     -- Check that any part of the gaussian is in-bounds
     local ul = {math.floor(pt[1] - 3 * sigma), math.floor(pt[2] - 3 * sigma)}
@@ -155,7 +160,7 @@ function drawGaussian(img, pt, sigma)
     return img
 end
 
-function drawLine(img,pt1,pt2,width,color)
+function M.drawLine(img,pt1,pt2,width,color)
     -- I'm sure there's a line drawing function somewhere in Torch,
     -- but since I couldn't find it here's my basic implementation
     local color = color or {1,1,1}
@@ -180,7 +185,7 @@ function drawLine(img,pt1,pt2,width,color)
     return img
 end
 
-function colorHM(x)
+function M.colorHM(x)
     -- Converts a one-channel grayscale image to a color heatmap image
     local function gauss(x,a,b,c)
         return torch.exp(-torch.pow(torch.add(x,-b),2):div(2*c*c)):mul(a)
@@ -197,7 +202,7 @@ end
 -- Flipping functions
 -------------------------------------------------------------------------------
 
-function shuffleLR(x, dataset)
+function M.shuffleLR(x, dataset)
     assert(x:dim() == 4 or x:dim() == 3, 'dim must be 4 or 3')
     local dim = x:dim() - 2
     local matchedParts
@@ -213,10 +218,12 @@ function shuffleLR(x, dataset)
     return y
 end
 
-function flip(x)
+function M.flip(x)
     local y = torch.FloatTensor(x:size())
     for i = 1, x:size(1) do
         image.hflip(y[i], x[i]:float())
     end
     return y:typeAs(x)
 end
+
+return M

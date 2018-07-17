@@ -36,8 +36,10 @@ Example:
 
 #### Slightly modified from optim.Logger to allow appending to logs ####
 ]]
-require 'xlua'
-local Logger = torch.class('Logger')
+local xlua = require 'xlua'
+
+local M = {}
+local Logger = torch.class('Logger', M)
 
 function Logger:__init(filename, continue, timestamp)
    if filename then
@@ -189,3 +191,5 @@ function Logger:plot(...)
       end
    end
 end
+
+return M.Logger

@@ -1,11 +1,11 @@
 require 'cunn'
 require 'cudnn'
 require 'optim'
-require 'lib/util/img'
-require 'lib/util/eval'
-require 'lib/util/Logger'
-require 'common/util'
 
+local Logger = require 'lib/util/Logger'
+local img = require 'lib/util/img'
+local eva = require 'lib/util/eval'
+local util = require 'common/util'
 local matio = require 'matio'
 
 local M = {}
@@ -122,7 +122,7 @@ function Trainer:train(epoch, loaders)
         local pred, ne, na
         if self.nOutput == 1 then
           loss[j] = self.criterion.criterions[j].output
-          pred = getPreds(output[j]:float())
+          pred = eva.getPreds(output[j]:float())
         end
         if self.nOutput == 5 then
           local l1 = self.criterion.criterions[1].criterions[j].output
@@ -131,7 +131,7 @@ function Trainer:train(epoch, loaders)
           loss[j] = loss[j] + l1 * 1
           loss[j] = loss[j] + l2 * self.opt.weightProj
           if self.opt.evalOut == 's3' then pred = output[5][j]:float() end
-          if self.opt.evalOut == 'hg' then pred = getPreds(output[1][j]:float()) end
+          if self.opt.evalOut == 'hg' then pred = eva.getPreds(output[1][j]:float()) end
         end
         pred = self:getOrigCoord(pred,center,scale)
         err[j], ne = self:computeError(pred,gtpts,ref)
@@ -255,7 +255,7 @@ function Trainer:test(epoch, iter, loaders, split)
         local pred, ne, na
         if self.nOutput == 1 then
           loss[j] = self.criterion.criterions[j].output
-          pred = getPreds(output[j]:float())
+          pred = eva.getPreds(output[j]:float())
         end
         if self.nOutput == 5 then
           local l1 = self.criterion.criterions[1].criterions[j].output
@@ -264,7 +264,7 @@ function Trainer:test(epoch, iter, loaders, split)
           loss[j] = loss[j] + l1 * 1
           loss[j] = loss[j] + l2 * self.opt.weightProj
           if self.opt.evalOut == 's3' then pred = output[5][j]:float() end
-          if self.opt.evalOut == 'hg' then pred = getPreds(output[1][j]:float()) end
+          if self.opt.evalOut == 'hg' then pred = eva.getPreds(output[1][j]:float()) end
         end
         pred = self:getOrigCoord(pred,center,scale)
         err[j], ne = self:computeError(pred,gtpts,ref)
@@ -351,7 +351,7 @@ function Trainer:predict(loaders, split, eval)
     if eval then
       local eval_path = paths.concat(self.opt.save,'eval_' .. split)
       local eval_file = paths.concat(eval_path, string.format("%05d.mat" % index[1]))
-      makedir(eval_path)
+      util.makedir(eval_path)
       if not paths.filep(eval_file) then
         local center, scale = sample.center, sample.scale
         local eval = torch.FloatTensor(self.opt.seqLength, output[1][1]:size(2), 2)
@@ -359,11 +359,11 @@ function Trainer:predict(loaders, split, eval)
         for j = 1, self.opt.seqLength do
           local pred, prob
           if self.nOutput == 1 then
-            pred, prob = getPreds(output[1][j]:float())
+            pred, prob = eva.getPreds(output[1][j]:float())
           end
           if self.nOutput == 5 then
             if self.opt.evalOut == 's3' then pred = output[5][j]:float(); prob = 0 end
-            if self.opt.evalOut == 'hg' then pred, prob = getPreds(output[1][j]:float()) end
+            if self.opt.evalOut == 'hg' then pred, prob = eva.getPreds(output[1][j]:float()) end
           end
           eval[j] = self:getOrigCoord(pred,center,scale)[1]
           conf[j] = prob
@@ -373,7 +373,7 @@ function Trainer:predict(loaders, split, eval)
     else
       local pred_path = paths.concat(self.opt.save,'pred_' .. split)
       local pred_file = paths.concat(pred_path, string.format("%05d.mat" % index[1]))
-      makedir(pred_path)
+      util.makedir(pred_path)
       if not paths.filep(pred_file) then
         local hmap = torch.FloatTensor(self.opt.seqLength, output[1][1]:size(2),
             self.opt.outputRes, self.opt.outputRes)
@@ -451,7 +451,7 @@ end
 function Trainer:getOrigCoord(pred, center, scale)
   for i = 1, pred:size(1) do
     for j = 1, pred:size(2) do
-      pred[i][j] = transform(pred[i][j], center[i], scale[i][1], 0,
+      pred[i][j] = img.transform(pred[i][j], center[i], scale[i][1], 0,
           self.opt.outputRes, true, false)
     end
   end
@@ -488,7 +488,7 @@ function Trainer:computeAccuracy(output, target, ref)
 -- target: N x d x 2
 -- output: N x d x 2
 -- ref:    N x 1
-  return coordAccuracy(output, target, 0.05, nil, self.opt.outputRes, ref)
+  return eva.coordAccuracy(output, target, 0.05, nil, self.opt.outputRes, ref)
 end
 
 return M.Trainer

@@ -1,8 +1,8 @@
 require 'hdf5'
 require 'image'
-require 'common/util'
-require 'lib/util/img'
 
+local util = require 'common/util'
+local img = require 'lib/util/img'
 local geometry = require 'lib/util/geometry'
 
 local M = {}
@@ -28,7 +28,7 @@ end
 
 -- Get seq id and num of frames
 function PennCropDataset:_preproAnno()
-  local seqId = unique(self.ind2sub[{{},1}])
+  local seqId = util.unique(self.ind2sub[{{},1}])
   local nFrame = {}
   for i = 1, seqId:numel() do
     local n = self.ind2sub[{{},1}]:eq(seqId[i]):sum()
@@ -62,20 +62,20 @@ function PennCropDataset:_getSeq(i)
 end
 
 -- Get image path
-function PennCropDataset:_imgpath(idx)
+function PennCropDataset:_impath(idx)
   return string.format('%04d/%06d.jpg',self.ind2sub[idx][1],self.ind2sub[idx][2])
 end
 
 -- Load image
 function PennCropDataset:_loadImage(idx)
-  return image.load(paths.concat(self.dir,self:_imgpath(idx)))
+  return image.load(paths.concat(self.dir,self:_impath(idx)))
 end
 
 -- Get center and scale
-function PennCropDataset:_getCenterScale(img)
-  assert(img:size():size() == 3)
-  local w = img:size(3)
-  local h = img:size(2)
+function PennCropDataset:_getCenterScale(im)
+  assert(im:size():size() == 3)
+  local w = im:size(3)
+  local h = im:size(2)
   local x = (w+1)/2
   local y = (h+1)/2
   local scale = math.max(w,h)/200
@@ -99,26 +99,26 @@ function PennCropDataset:get(idx, train)
   for i = 1, seqIdx:numel() do
     local sid = seqIdx[i]
     -- Load image
-    local img = self:_loadImage(sid)
+    local im = self:_loadImage(sid)
     -- Get center and scale (same for all frames)
     if i == 1 then
-      center, scale = unpack(self:_getCenterScale(img))
+      center, scale = unpack(self:_getCenterScale(im))
     end
     -- Transform image
-    local inp = crop(img, center, scale, 0, self.inputRes)
+    local inp = img.crop(im, center, scale, 0, self.inputRes)
     -- Get projection
     local pts = self.part[sid]
     local pj = torch.zeros(pts:size())
     for j = 1, pts:size(1) do
       if pts[j][1] ~= 0 and pts[j][2] ~= 0 then
-        pj[j] = transform(pts[j], center, scale, 0, self.outputRes, false, false)
+        pj[j] = img.transform(pts[j], center, scale, 0, self.outputRes, false, false)
       end
     end
     -- Generate heatmap
     local hm = torch.zeros(pts:size(1), self.outputRes, self.outputRes)
     for j = 1, pts:size(1) do
       if pts[j][1] ~= 0 and pts[j][2] ~= 0 then
-        drawGaussian(hm[j], torch.round(pj[j]), 2)
+        img.drawGaussian(hm[j], torch.round(pj[j]), 2)
       end
     end
     input[i] = inp
@@ -143,8 +143,8 @@ function PennCropDataset:get(idx, train)
     -- Flip
     if torch.uniform() <= 0.5 then
       for i = 1, #input do
-        input[i] = flip(input[i])
-        hmap[i] = flip(shuffleLR(hmap[i], 'penn-crop'))
+        input[i] = img.flip(input[i])
+        hmap[i] = img.flip(img.shuffleLR(hmap[i], 'penn-crop'))
         proj[i] = geometry.shuffleLR(proj[i],'penn-crop')
         local ind = proj[i]:eq(0)
         proj[i][{{},1}] = self.outputRes - proj[i][{{},1}] + 1

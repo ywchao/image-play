@@ -1,5 +1,7 @@
 
-function dir(path, ext)
+local M = {}
+
+function M.dir(path, ext)
   list = {}
   for file in paths.files(path) do
     if file:find(ext .. '$') then
@@ -10,13 +12,13 @@ function dir(path, ext)
   return list
 end
 
-function makedir(dir)
+function M.makedir(dir)
   if not paths.dirp(dir) then
     paths.mkdir(dir)
   end
 end
 
-function keys(table)
+function M.keys(table)
   local keys={}
   local i = 0
   for k in pairs(table) do
@@ -26,7 +28,7 @@ function keys(table)
   return keys
 end
 
-function unique(input)
+function M.unique(input)
 -- input should be a one dimensinoal tensor
   local b = {}
   for i = 1, input:numel() do
@@ -40,13 +42,13 @@ function unique(input)
   return torch.Tensor(out)
 end
 
-function find(X, n)
+function M.find(X, n)
 -- X should be a one dimensional tensor
   local indices = torch.linspace(1,X:size(1),X:size(1)):long()
   return indices[X:eq(n)]
 end
 
-function append(tab1, tab2)
+function M.append(tab1, tab2)
   local t = {}
   for i = 1, #tab1 do
     t[i] = tab1[i]
@@ -57,7 +59,7 @@ function append(tab1, tab2)
   return t
 end
 
-function slice(tab, ind)
+function M.slice(tab, ind)
   local t1, t2 = {}, {}
   for i = 1, ind do
     table.insert(t1, tab[i])
@@ -67,3 +69,5 @@ function slice(tab, ind)
   end
   return t1, t2
 end
+
+return M
