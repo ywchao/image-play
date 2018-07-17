@@ -31,17 +31,17 @@ frame_rate = 30;
 % 0. image only
 % vis_mode = 0;
 % vis_fr_root = frame_root;
-% vis_vd_root = './outputs/vis_dataset/videos_original/';
+% vis_vd_root = './output/vis_dataset/videos_original/';
 
 % 1. annotation with image
 vis_mode = 1;
-vis_fr_root = './outputs/vis_dataset/frames_joints_w_image/';
-vis_vd_root = './outputs/vis_dataset/videos_joints_w_image/';
+vis_fr_root = './output/vis_dataset/frames_joints_w_image/';
+vis_vd_root = './output/vis_dataset/videos_joints_w_image/';
 
 % 2. annotation without image
 % vis_mode = 2;
-% vis_fr_root = './outputs/vis_dataset/frames_joints_only/';
-% vis_vd_root = './outputs/vis_dataset/videos_joints_only/';
+% vis_fr_root = './output/vis_dataset/frames_joints_only/';
+% vis_vd_root = './output/vis_dataset/videos_joints_only/';
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 makedir(vis_vd_root);

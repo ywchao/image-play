@@ -3,8 +3,8 @@
 exp_name = sprintf('nn-%s-th%02d',mode,thres_vis);
 curr_dir = sprintf('exp/penn-crop/hg-256/eval_%s/',split);
 pred_dir = sprintf('exp/penn-crop/%s/eval_%s/',exp_name,split);
-png_root = sprintf('outputs/vis_%s/%s_png/',exp_name,split);
-gif_root = sprintf('outputs/vis_%s/%s_gif/',exp_name,split);
+png_root = sprintf('output/vis_%s/%s_png/',exp_name,split);
+gif_root = sprintf('output/vis_%s/%s_gif/',exp_name,split);
 
 % set body joint config
 param.pa = [0 1 1 2 3 4 5 2 3 8 9 10 11];

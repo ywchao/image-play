@@ -9,7 +9,7 @@ list_seq = dir([lbdata_root '*.mat']);
 list_seq = {list_seq.name}';
 num_seq = numel(list_seq);
 
-vis_root = './outputs/vis_action_phase/';
+vis_root = './output/vis_action_phase/';
 
 % reading annotations
 fprintf('visualizing action phase ... \n');

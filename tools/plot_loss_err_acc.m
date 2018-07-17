@@ -169,7 +169,7 @@ axis([lim(1:2) 0.30 1]);
 set(gca,'YTick',0.30:0.05:1.00);
 
 % save to file
-save_file = ['outputs/plot_' exp_name '.pdf'];
+save_file = ['output/plot_' exp_name '.pdf'];
 if ~exist(save_file,'file')
     set(gcf,'PaperPosition',[0 0 11 6]);
     set(gcf,'PaperOrientation','landscape');

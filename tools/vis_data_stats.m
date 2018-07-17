@@ -2,7 +2,7 @@
 frame_root = './external/Penn_Action/frames/';
 label_root = './external/Penn_Action/labels/';
 
-save_dir = 'outputs/vis_dataset/';
+save_dir = 'output/vis_dataset/';
 makedir(save_dir);
 
 list_seq = dir([label_root '*.mat']);

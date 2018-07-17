@@ -6,8 +6,8 @@ exp_name = 'hg-256-res-clstm';
 split = 'test';
 
 % set vis root
-png_root = ['./outputs/vis_' exp_name '/' split '_png/'];
-gif_root = ['./outputs/vis_' exp_name '/' split '_gif/'];
+png_root = ['./output/vis_' exp_name '/' split '_png/'];
+gif_root = ['./output/vis_' exp_name '/' split '_gif/'];
 
 % set parameters
 pa = [8,1,2,3,1,5,6,9,10,11,0,9,12,13,9,15,16];

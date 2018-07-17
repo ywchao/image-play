@@ -18,8 +18,8 @@ factor = 1.1;
 % texture = 2;
 
 % set vis root
-vis_root = sprintf('./outputs/render_%s/%s_texture_%1d/', exp_name, split, texture);
-gif_root = sprintf('./outputs/render_%s/%s_texture_%1d_gif/', exp_name, split, texture);
+vis_root = sprintf('./output/render_%s/%s_texture_%1d/', exp_name, split, texture);
+gif_root = sprintf('./output/render_%s/%s_texture_%1d_gif/', exp_name, split, texture);
 makedir(vis_root);
 makedir(gif_root);
 
