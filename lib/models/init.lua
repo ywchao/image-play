@@ -6,7 +6,6 @@ local M = {}
 function M.setup(opt, checkpoint)
   -- Get model
   local model
-  local model_enc, model_rnn, model_dec
   if checkpoint then
     local modelPath = paths.concat(opt.save, checkpoint.modelFile)
     assert(paths.filep(modelPath), 'Saved model not found: ' .. modelPath)
@@ -21,34 +20,14 @@ function M.setup(opt, checkpoint)
     local outputDim = dataset.part:size(2)
   
     -- Create model
-    if Model.createModel ~= nil and
-       Model.createModelEnc == nil and
-       Model.createModelRNN == nil and
-       Model.createModelDec == nil then
-      model = Model.createModel(opt, outputDim)
-    end
-    if Model.createModel == nil and
-       Model.createModelEnc ~= nil and
-       Model.createModelRNN ~= nil and
-       Model.createModelDec ~= nil then
-      model = {}
-      model['enc'] = Model.createModelEnc()
-      model['rnn_one'] = Model.createModelRNN(opt)
-      model['dec'] = Model.createModelDec(outputDim)
-    end
+    model = Model.createModel(opt, outputDim)
   
     -- Load hourglass
     if opt.hgModel ~= 'none' then
       assert(paths.filep(opt.hgModel),
           'initial hourglass model not found: ' .. opt.hgModel)
       local model_hg = torch.load(opt.hgModel)
-  
-      if torch.type(model) == 'nn.gModule' then
-        Model.loadHourglass(model, model_hg)
-      end
-      if torch.type(model) == 'table' then
-        Model.loadHourglass(model['enc'], model['dec'], model_hg)
-      end
+      Model.loadHourglass(model, model_hg)
     end
     if opt.s3Model ~= 'none' then
       assert(paths.filep(opt.s3Model),
@@ -68,42 +47,24 @@ function M.setup(opt, checkpoint)
   -- Create criterion
   local criterion
   local nOutput = #model.outnode.children
-  if torch.type(model) == 'nn.gModule' then
-    assert(nOutput == 1 or nOutput == 5)
-    criterion = nn.ParallelCriterion()
-    if nOutput == 1 then
-      for i = 1, opt.seqLength do
-        criterion:add(nn.MSECriterion())
-      end
-    end
-    if nOutput == 5 then
-      for i = 1, nOutput do
-        criterion:add(nn.ParallelCriterion())
-        for j = 1, opt.seqLength do
-          criterion.criterions[i]:add(nn.MSECriterion())
-        end
-      end
+  assert(nOutput == 1 or nOutput == 5)
+  criterion = nn.ParallelCriterion()
+  if nOutput == 1 then
+    for i = 1, opt.seqLength do
+      criterion:add(nn.MSECriterion())
     end
   end
-  if torch.type(model) == 'table' then
-    criterion = nn.MSECriterion()
+  if nOutput == 5 then
+    for i = 1, nOutput do
+      criterion:add(nn.ParallelCriterion())
+      for j = 1, opt.seqLength do
+        criterion.criterions[i]:add(nn.MSECriterion())
+      end
+    end
   end
 
   -- Convert to CUDA
-  if torch.type(model) == 'nn.gModule' then
-    model:cuda()
-  end
-  if torch.type(model) == 'table' then
-    model['enc']:cuda()
-    model['rnn_one']:cuda()
-    model['dec']:cuda()
-    -- Check if model is residual type
-    if #model['rnn_one']:findModules('nn.CAddTable') == 0 then
-      model['res'] = false
-    else
-      model['res'] = true
-    end
-  end
+  model:cuda()
   criterion:cuda()
 
   return model, criterion

@@ -7,7 +7,6 @@ require 'lib/util/Logger'
 require 'common/util'
 
 local matio = require 'matio'
-local model_utils = require 'lib/util/model_utils'
 
 local M = {}
 local Trainer = torch.class('image-play.Trainer', M)
@@ -20,25 +19,7 @@ function Trainer:__init(model, criterion, opt, optimState)
     weightDecay = opt.weightDecay
   }
   self.opt = opt
-  -- Single nngraph model
-  if torch.type(model) == 'nn.gModule' then
-    self.params, self.gradParams = model:getParameters()
-  end
-  -- Breakdown nngraph model
-  if torch.type(model) == 'table' then
-    self.params, self.gradParams = model_utils.combine_all_parameters(
-        model['enc'], model['rnn_one'], model['dec']
-    )
-    self.model['rnn'] = model_utils.clone_many_times(
-        model['rnn_one'], self.opt.seqLength
-    )
-    self.lstm_ind = {}
-    for i, m in ipairs(model['rnn'][1].modules) do
-      if torch.type(m) == 'cudnn.LSTM' then
-        table.insert(self.lstm_ind, i)
-      end
-    end
-  end
+  self.params, self.gradParams = model:getParameters()
   self.logger = {
     train = Logger(paths.concat(opt.save, 'train.log'), opt.resume),
     val = Logger(paths.concat(opt.save, 'val.log'), opt.resume)
@@ -92,7 +73,7 @@ function Trainer:train(epoch, loaders)
   xlua.progress(0, goal)
 
   -- Set the batch norm to training mode
-  self:setModelMode('training')
+  self.model:training()
   for i, sample in dataloader:run({train=true}) do
     local dataTime = dataTimer:time().real
   
@@ -111,192 +92,60 @@ function Trainer:train(epoch, loaders)
     local target
     if self.nOutput == 1 then target = hmap end
 
-    -- Init output
-    local loss, err, acc = {}, {}, {}
-
-    -- Single nngraph model
-    if torch.type(self.model) == 'nn.gModule' then
-      -- Forward pass
-      local output = self.model:forward(input)
-      if self.nOutput == 5 then
-        local proj_ = {}
-        for j = 1, #proj do
-          proj_[j] = proj[j]:clone()
-          proj_[j][proj_[j]:eq(0)] = output[5][j][proj_[j]:eq(0)]
-        end
-        target = {hmap, repos, trans, focal, proj_}
+    -- Forward pass
+    local output = self.model:forward(input)
+    if self.nOutput == 5 then
+      local proj_ = {}
+      for j = 1, #proj do
+        proj_[j] = proj[j]:clone()
+        proj_[j][proj_[j]:eq(0)] = output[5][j][proj_[j]:eq(0)]
       end
-      self.criterion:forward(self.model.output, target)
-
-      -- Backprop
-      self.model:zeroGradParameters()
-      self.criterion:backward(self.model.output, target)
-      self.model:backward(input, self.criterion.gradInput)
-
-      -- Optimization
-      optim.rmsprop(feval, self.params, self.optimState)
-
-      -- Compute loss and error
-      local center, scale = sample.center, sample.scale
-      local ref = self:getRef(scale)
-      for j = 1, self.opt.seqLength do
-        local gtpts = sample.gtpts[j]
-        if j <= self.seqlen then
-          local pred, ne, na
-          if self.nOutput == 1 then
-            loss[j] = self.criterion.criterions[j].output
-            pred = getPreds(output[j]:float())
-          end
-          if self.nOutput == 5 then
-            local l1 = self.criterion.criterions[1].criterions[j].output
-            local l2 = self.criterion.criterions[5].criterions[j].output
-            loss[j] = 0.0
-            loss[j] = loss[j] + l1 * 1
-            loss[j] = loss[j] + l2 * self.opt.weightProj
-            if self.opt.evalOut == 's3' then pred = output[5][j]:float() end
-            if self.opt.evalOut == 'hg' then pred = getPreds(output[1][j]:float()) end
-          end
-          pred = self:getOrigCoord(pred,center,scale)
-          err[j], ne = self:computeError(pred,gtpts,ref)
-          acc[j], na = self:computeAccuracy(pred,gtpts,ref)
-          assert(ne == na)
-          err[j] = err[j] / ne
-          acc[j] = acc[j] / ne
-        else
-          loss[j] = 0/0
-          err[j] = 0/0
-          acc[j] = 0/0
-        end
-      end
-      acc = torch.Tensor(acc)
+      target = {hmap, repos, trans, focal, proj_}
     end
+    self.criterion:forward(self.model.output, target)
 
-    -- Breakdown nngraph model
-    if torch.type(self.model) == 'table' then
-      -- Reset RNN States
-      self:resetRNNStates()
+    -- Backprop
+    self.model:zeroGradParameters()
+    self.criterion:backward(self.model.output, target)
+    self.model:backward(input, self.criterion.gradInput)
 
-      -- Zero gradient params
-      self:zeroGradParams()
+    -- Optimization
+    optim.rmsprop(feval, self.params, self.optimState)
 
-      collectgarbage()
-
-      --- Forward pass and decoder backward pass
-      local output = {}
-      local out_enc, out_rnn, inp_zero, inp_rnn
-      local gradInputDec = {}
-      for j = 1, self.seqlen do
-        gradInputDec[j] = {}
-      end
-      for j = 1, self.seqlen do
-        if j == 1 then
-          out_enc = self.model['enc']:forward(input)
-          if torch.type(out_enc) ~= 'table' then
-            out_enc = {out_enc}
-          end
-          if self.model['res'] then
-            inp_rnn = append(out_enc, out_enc)
-            out_rnn = self.model['rnn'][j]:forward(inp_rnn)
-          else
-            out_rnn = self.model['rnn'][j]:forward(out_enc)
-          end
-        else
-          if inp_zero == nil then
-            inp_zero = {}
-            for k = 1, #out_enc do
-              inp_zero[k] = torch.zeros(out_enc[k]:size()):cuda()
-            end
-          end
-          if self.model['res'] then
-            inp_rnn = append(out_enc, inp_zero)
-            out_rnn = self.model['rnn'][j]:forward(inp_rnn)
-          else
-            out_rnn = self.model['rnn'][j]:forward(inp_zero)
-          end
+    -- Compute loss and error
+    local loss, err, acc = {}, {}, {}
+    local center, scale = sample.center, sample.scale
+    local ref = self:getRef(scale)
+    for j = 1, self.opt.seqLength do
+      local gtpts = sample.gtpts[j]
+      if j <= self.seqlen then
+        local pred, ne, na
+        if self.nOutput == 1 then
+          loss[j] = self.criterion.criterions[j].output
+          pred = getPreds(output[j]:float())
         end
-        output[j] = self.model['dec']:forward(out_rnn):clone()
-        if j < self.seqlen then
-          for _, v in ipairs(self.lstm_ind) do
-            self.model['rnn'][j+1].modules[v].hiddenInput = self.model['rnn'][j].modules[v].hiddenOutput
-            self.model['rnn'][j+1].modules[v].cellInput = self.model['rnn'][j].modules[v].cellOutput
-          end
+        if self.nOutput == 5 then
+          local l1 = self.criterion.criterions[1].criterions[j].output
+          local l2 = self.criterion.criterions[5].criterions[j].output
+          loss[j] = 0.0
+          loss[j] = loss[j] + l1 * 1
+          loss[j] = loss[j] + l2 * self.opt.weightProj
+          if self.opt.evalOut == 's3' then pred = output[5][j]:float() end
+          if self.opt.evalOut == 'hg' then pred = getPreds(output[1][j]:float()) end
         end
-        self.criterion:forward(self.model['dec'].output, label[j])
-
-        loss[j] = self.criterion.output
-        acc[j] = self:computeAccuracy(output[j]:contiguous(), label[j]:float())
-
-        self.criterion:backward(self.model['dec'].output, label[j])
-        self.model['dec']:backward(out_rnn, self.criterion.gradInput)
-        if torch.type(out_rnn) ~= 'table' then
-          gradInputDec[j] = self.model['dec'].gradInput[1]:clone()
-        else
-          for k = 1, #self.model['dec'].gradInput do
-            gradInputDec[j][k] = self.model['dec'].gradInput[k]:clone()
-          end
-        end
-      end
-      for j = self.seqlen+1, self.opt.seqLength do
-        loss[j] = 0
+        pred = self:getOrigCoord(pred,center,scale)
+        err[j], ne = self:computeError(pred,gtpts,ref)
+        acc[j], na = self:computeAccuracy(pred,gtpts,ref)
+        assert(ne == na)
+        err[j] = err[j] / ne
+        acc[j] = acc[j] / ne
+      else
+        loss[j] = 0/0
+        err[j] = 0/0
         acc[j] = 0/0
       end
-      acc = torch.Tensor(acc)
-
-      -- Backward pass for RNN and encoder
-      local gradInputRNNSum
-      for j = self.seqlen, 1, -1 do
-        if self.model['res'] then
-          if j == 1 then
-            inp_rnn = append(out_enc, out_enc)
-          else
-            inp_rnn = append(out_enc, inp_zero)
-          end
-          self.model['rnn'][j]:backward(inp_rnn, gradInputDec[j])
-          if j == self.seqlen then
-            gradInputRNNSum = {}
-            for k = 1, #out_enc do
-              gradInputRNNSum[k] = self.model['rnn'][j].gradInput[k]:clone()
-            end
-          else
-            for k = 1, #out_enc do
-              gradInputRNNSum[k] = gradInputRNNSum[k] + self.model['rnn'][j].gradInput[k]
-            end
-          end
-          -- Need to propagate gradient back from RNN for the first frame
-          -- Spent two days to figure this out
-          if j == 1 then
-            for k = 1, #out_enc do
-              gradInputRNNSum[k] = gradInputRNNSum[k] + self.model['rnn'][j].gradInput[k+#out_enc]
-            end
-          end
-        else
-          if j ~= 1 then
-            self.model['rnn'][j]:backward(inp_zero, gradInputDec[j])
-          else
-            self.model['rnn'][j]:backward(out_enc, gradInputDec[j])
-          end
-        end
-        if j ~= 1 then
-          for _, v in ipairs(self.lstm_ind) do
-            self.model['rnn'][j-1].modules[v].gradHiddenOutput = self.model['rnn'][j].modules[v].gradHiddenInput
-            self.model['rnn'][j-1].modules[v].gradCellOutput = self.model['rnn'][j].modules[v].gradCellInput
-          end
-        end
-      end
-
-      -- Backward pass for encoder
-      if #gradInputRNNSum == 1 then
-        gradInputRNNSum = gradInputRNNSum[1]
-      end
-      if self.model['res'] then
-        self.model['enc']:backward(input, gradInputRNNSum)
-      else
-        self.model['enc']:backward(input, self.model['rnn'][1].gradInput)
-      end
-
-      -- Optimization
-      optim.rmsprop(feval, self.params, self.optimState)
     end
+    acc = torch.Tensor(acc)
 
     -- Print and log
     local time = timer:time().real
@@ -365,7 +214,7 @@ function Trainer:test(epoch, iter, loaders, split)
   print("=> Test on " .. split)
   xlua.progress(0, size)
 
-  self:setModelMode('evaluate')
+  self.model:evaluate()
   for i, sample in dataloader:run({train=false}) do
     -- Get input/output and convert to CUDA
     local input = sample.input[1]:cuda()
@@ -382,112 +231,54 @@ function Trainer:test(epoch, iter, loaders, split)
     local target
     if self.nOutput == 1 then target = hmap end
 
-    -- Init output
+    -- Forward pass
+    local output = self.model:forward(input)
+    if self.nOutput == 5 then
+      local proj_ = {}
+      for j = 1, #proj do
+        proj_[j] = proj[j]:clone()
+        proj_[j][proj_[j]:eq(0)] = output[5][j][proj_[j]:eq(0)]
+      end
+      target = {hmap, repos, trans, focal, proj_}
+    end
+    self.criterion:forward(self.model.output, target)
+
+    -- Compute loss and error
+    -- TODO: evaluation can be simplified: keep only dist and compute err/acc
+    -- later. See matlab evaluation script.
     local loss, err, acc, num = {}, {}, {}, {}
-
-    -- Single nngraph model
-    if torch.type(self.model) == 'nn.gModule' then
-      -- Forward pass
-      local output = self.model:forward(input)
-      if self.nOutput == 5 then
-        local proj_ = {}
-        for j = 1, #proj do
-          proj_[j] = proj[j]:clone()
-          proj_[j][proj_[j]:eq(0)] = output[5][j][proj_[j]:eq(0)]
+    local center, scale = sample.center, sample.scale
+    local ref = self:getRef(scale)
+    for j = 1, self.opt.seqLength do
+      local gtpts = sample.gtpts[j]
+      if j <= self.seqlen then
+        local pred, ne, na
+        if self.nOutput == 1 then
+          loss[j] = self.criterion.criterions[j].output
+          pred = getPreds(output[j]:float())
         end
-        target = {hmap, repos, trans, focal, proj_}
-      end
-      self.criterion:forward(self.model.output, target)
-
-      -- Compute loss and error
-      -- TODO: evaluation can be simplified: keep only dist and compute err/acc
-      -- later. See matlab evaluation script.
-      local center, scale = sample.center, sample.scale
-      local ref = self:getRef(scale)
-      for j = 1, self.opt.seqLength do
-        local gtpts = sample.gtpts[j]
-        if j <= self.seqlen then
-          local pred, ne, na
-          if self.nOutput == 1 then
-            loss[j] = self.criterion.criterions[j].output
-            pred = getPreds(output[j]:float())
-          end
-          if self.nOutput == 5 then
-            local l1 = self.criterion.criterions[1].criterions[j].output
-            local l2 = self.criterion.criterions[5].criterions[j].output
-            loss[j] = 0.0
-            loss[j] = loss[j] + l1 * 1
-            loss[j] = loss[j] + l2 * self.opt.weightProj
-            if self.opt.evalOut == 's3' then pred = output[5][j]:float() end
-            if self.opt.evalOut == 'hg' then pred = getPreds(output[1][j]:float()) end
-          end
-          pred = self:getOrigCoord(pred,center,scale)
-          err[j], ne = self:computeError(pred,gtpts,ref)
-          acc[j], na = self:computeAccuracy(pred,gtpts,ref)
-          assert(ne == na)
-          num[j] = ne
-        else
-          loss[j] = 0/0
-          err[j] = 0/0
-          acc[j] = 0/0
-          num[j] = 0/0
+        if self.nOutput == 5 then
+          local l1 = self.criterion.criterions[1].criterions[j].output
+          local l2 = self.criterion.criterions[5].criterions[j].output
+          loss[j] = 0.0
+          loss[j] = loss[j] + l1 * 1
+          loss[j] = loss[j] + l2 * self.opt.weightProj
+          if self.opt.evalOut == 's3' then pred = output[5][j]:float() end
+          if self.opt.evalOut == 'hg' then pred = getPreds(output[1][j]:float()) end
         end
-      end
-      acc = torch.Tensor(acc)
-    end
-
-    -- Breakdown nngraph model
-    if torch.type(self.model) == 'table' then
-      -- Reset RNN States
-      self:resetRNNStates()
-
-      -- Forward pass
-      local output = {}
-      local out_enc, out_rnn, inp_zero, inp_rnn
-      for j = 1, self.seqlen do
-        if j == 1 then
-          out_enc = self.model['enc']:forward(input)
-          if torch.type(out_enc) ~= 'table' then
-            out_enc = {out_enc}
-          end
-          if self.model['res'] then
-            inp_rnn = append(out_enc, out_enc)
-            out_rnn = self.model['rnn'][j]:forward(inp_rnn)
-          else
-            out_rnn = self.model['rnn'][j]:forward(out_enc)
-          end
-        else
-          if inp_zero == nil then
-            inp_zero = {}
-            for k = 1, #out_enc do
-              inp_zero[k] = torch.zeros(out_enc[k]:size()):cuda()
-            end
-          end
-          if self.model['res'] then
-            inp_rnn = append(out_enc, inp_zero)
-            out_rnn = self.model['rnn'][j]:forward(inp_rnn)
-          else
-            out_rnn = self.model['rnn'][j]:forward(inp_zero)
-          end
-        end
-        output[j] = self.model['dec']:forward(out_rnn):clone()
-        if j < self.seqlen then
-          for _, v in ipairs(self.lstm_ind) do
-            self.model['rnn'][j+1].modules[v].hiddenInput = self.model['rnn'][j].modules[v].hiddenOutput
-            self.model['rnn'][j+1].modules[v].cellInput = self.model['rnn'][j].modules[v].cellOutput
-          end
-        end
-        self.criterion:forward(self.model['dec'].output, label[j])
-
-        loss[j] = self.criterion.output
-        acc[j] = self:computeAccuracy(output[j]:contiguous(), label[j]:float())
-      end
-      for j = self.seqlen+1, self.opt.seqLength do
-        loss[j] = 0
+        pred = self:getOrigCoord(pred,center,scale)
+        err[j], ne = self:computeError(pred,gtpts,ref)
+        acc[j], na = self:computeAccuracy(pred,gtpts,ref)
+        assert(ne == na)
+        num[j] = ne
+      else
+        loss[j] = 0/0
+        err[j] = 0/0
         acc[j] = 0/0
+        num[j] = 0/0
       end
-      acc = torch.Tensor(acc)
     end
+    acc = torch.Tensor(acc)
 
     -- Accumulate loss and acc
     assert(input:size(1) == 1, 'batch size must be 1 with run({train=false})')
@@ -502,7 +293,7 @@ function Trainer:test(epoch, iter, loaders, split)
 
     xlua.progress(i, size)
   end
-  self:setModelMode('training')
+  self.model:training()
 
   -- Compute mean loss and accuracy
   for i = 1, self.opt.seqLength do
@@ -544,63 +335,14 @@ function Trainer:predict(loaders, split, eval)
   print("=> Generating predictions ...")
   xlua.progress(0, size)
 
-  self:setModelMode('evaluate')
+  self.model:evaluate()
   for i, sample in dataloader:run({train=false,samp=samp}) do
     -- Get input/output and convert to CUDA
     local index = sample.index
     local input = sample.input[1]:cuda()
 
-    -- Init output
-    local output = {}
-
-    -- Single nngraph model
-    if torch.type(self.model) == 'nn.gModule' then
-      -- Forward pass
-      output = self.model:forward(input)
-    end
-
-    -- Breakdown nngraph model
-    if torch.type(self.model) == 'table' then
-      -- Reset RNN States
-      self:resetRNNStates()
-
-      -- Forward pass
-      local out_enc, out_rnn, inp_zero, inp_rnn
-      for j = 1, self.opt.seqLength do
-        if j == 1 then
-          out_enc = self.model['enc']:forward(input)
-          if torch.type(out_enc) ~= 'table' then
-            out_enc = {out_enc}
-          end
-          if self.model['res'] then
-            inp_rnn = append(out_enc, out_enc)
-            out_rnn = self.model['rnn'][j]:forward(inp_rnn)
-          else
-            out_rnn = self.model['rnn'][j]:forward(out_enc)
-          end
-        else
-          if inp_zero == nil then
-            inp_zero = {}
-            for k = 1, #out_enc do
-              inp_zero[k] = torch.zeros(out_enc[k]:size()):cuda()
-            end
-          end
-          if self.model['res'] then
-            inp_rnn = append(out_enc, inp_zero)
-            out_rnn = self.model['rnn'][j]:forward(inp_rnn)
-          else
-            out_rnn = self.model['rnn'][j]:forward(inp_zero)
-          end
-        end
-        output[j] = self.model['dec']:forward(out_rnn):clone()
-        if j < self.opt.seqLength then
-          for _, v in ipairs(self.lstm_ind) do
-            self.model['rnn'][j+1].modules[v].hiddenInput = self.model['rnn'][j].modules[v].hiddenOutput
-            self.model['rnn'][j+1].modules[v].cellInput = self.model['rnn'][j].modules[v].cellOutput
-          end
-        end
-      end
-    end
+    -- Forward pass
+    local output = self.model:forward(input)
 
     -- Save output
     assert(input:size(1) == 1, 'batch size must be 1 with run({train=false})')
@@ -669,7 +411,7 @@ function Trainer:predict(loaders, split, eval)
 
     xlua.progress(i, size)
   end
-  self:setModelMode('training')
+  self.model:training()
 end
 
 function Trainer:setSeqLenCritWeight(currBase, epoch)
@@ -678,85 +420,32 @@ function Trainer:setSeqLenCritWeight(currBase, epoch)
   -- seqlen = math.ceil(epoch / self.opt.currInt) + 1
   seqlen = currBase * 2 ^ math.ceil((epoch-1) / self.opt.currInt)
   seqlen = math.min(seqlen, self.opt.seqLength)
-  -- Single nngraph model
-  if torch.type(self.model) == 'nn.gModule' then
-    assert(self.nOutput == 1 or self.nOutput == 5)
-    if self.nOutput == 1 then
-      assert(self.opt.weightHMap == 1)
-      for i = 1, self.opt.seqLength do
-        if i <= seqlen then
-          self.criterion.weights[i] = 1
-        else
-          self.criterion.weights[i] = 0
-        end
-      end
-    end
-    if self.nOutput == 5 then
-      for i = 1, self.opt.seqLength do
-        self.criterion.criterions[2].weights[i] = 0
-        self.criterion.criterions[3].weights[i] = 0
-        self.criterion.criterions[4].weights[i] = 0
-        if i <= seqlen then
-          self.criterion.criterions[1].weights[i] = self.opt.weightHMap
-          self.criterion.criterions[5].weights[i] = self.opt.weightProj
-        else
-          self.criterion.criterions[1].weights[i] = 0
-          self.criterion.criterions[5].weights[i] = 0
-        end
+  assert(self.nOutput == 1 or self.nOutput == 5)
+  if self.nOutput == 1 then
+    assert(self.opt.weightHMap == 1)
+    for i = 1, self.opt.seqLength do
+      if i <= seqlen then
+        self.criterion.weights[i] = 1
+      else
+        self.criterion.weights[i] = 0
       end
     end
   end
-  -- breakdown nngraph model
-  if torch.type(self.model) == 'table' then
-    -- No need to set criterion weight
+  if self.nOutput == 5 then
+    for i = 1, self.opt.seqLength do
+      self.criterion.criterions[2].weights[i] = 0
+      self.criterion.criterions[3].weights[i] = 0
+      self.criterion.criterions[4].weights[i] = 0
+      if i <= seqlen then
+        self.criterion.criterions[1].weights[i] = self.opt.weightHMap
+        self.criterion.criterions[5].weights[i] = self.opt.weightProj
+      else
+        self.criterion.criterions[1].weights[i] = 0
+        self.criterion.criterions[5].weights[i] = 0
+      end
+    end
   end
   self.seqlen = seqlen
-end
-
-function Trainer:setModelMode(mode)
-  assert(mode == 'training' or mode == 'evaluate')
-  if mode == 'training' then
-    if torch.type(self.model) == 'nn.gModule' then
-      self.model:training()
-    end
-    if torch.type(self.model) == 'nn.table' then
-      self.model['enc']:training()
-      self.model['dec']:training()
-      for i = 1, #self.model['rnn'] do
-        self.model['rnn'][i]:training()
-      end
-    end
-  end
-  if mode == 'evaluate' then
-    if torch.type(self.model) == 'nn.gModule' then
-      self.model:evaluate()
-    end
-    if torch.type(self.model) == 'nn.table' then
-      self.model['enc']:evaluate()
-      self.model['dec']:evaluate()
-      for i = 1, #self.model['rnn'] do
-        self.model['rnn'][i]:evaluate()
-      end
-    end
-  end
-end
-
-function Trainer:resetRNNStates()
-  for i = 1, #self.model['rnn'] do
-    self.model['rnn'][i]:apply(function(module)
-      if torch.type(module) == 'cudnn.LSTM' then
-        module:resetStates()
-      end
-    end)
-  end
-end
-
-function Trainer:zeroGradParams()
-  self.model['enc']:zeroGradParameters()
-  self.model['dec']:zeroGradParameters()
-  for i = 1, #self.model['rnn'] do
-    self.model['rnn'][i]:zeroGradParameters()
-  end
 end
 
 function Trainer:getOrigCoord(pred, center, scale)
