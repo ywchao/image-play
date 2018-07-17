@@ -1,11 +1,16 @@
 
-expID = 'seq16-hg-256-res-clstm-res-64-w1e-6';  mode = 1;
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% % specify blender path
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+blender_path = '$BLENDER_PATH/blender-2.78a-linux-glibc211-x86_64/blender';
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+exp_name = 'hg-256-res-clstm-res-64';
 
 % split = 'val';
 split = 'test';
 
 % set parameters
-interval = 1;
 factor = 1.1;
 
 % texture = 0;
@@ -13,11 +18,13 @@ factor = 1.1;
 % texture = 2;
 
 % set vis root
-vis_root = sprintf('./outputs/render_scape_penn/%s/texture_%1d/%s/', expID, texture, split);
+vis_root = sprintf('./outputs/render_%s/%s_texture_%1d/', exp_name, split, texture);
+gif_root = sprintf('./outputs/render_%s/%s_texture_%1d_gif/', exp_name, split, texture);
 makedir(vis_root);
+makedir(gif_root);
 
 % set opt and init dataset
-opt.data = './data/Penn_Action_cropped';
+opt.data = './data/penn-crop';
 opt.nPhase = 16;
 opt.seqType = 'phase';
 opt.seqLength = 16;
@@ -26,18 +33,18 @@ opt.outputRes = 64;
 dataset = penn_crop(opt, split);
 
 % get video ids for visualization
+interval = 2;
 sidx = dataset.getSampledIdx();
 sidx = sidx(1:interval:numel(sidx));
 
-% visualize first min(K,len) videos for each action
+% limit to first min(K,len) videos for each action
 K = 3;
-extra = [787 1300 268 2027 295 2308 2247 1444];
-list_seq = dir('./data/Penn_Action_cropped/labels/*.mat');
+list_seq = dir('./data/penn-crop/labels/*.mat');
 list_seq = {list_seq.name}';
 num_seq = numel(list_seq);
 action = cell(num_seq,1);
 for i = 1:num_seq
-    lb_file = ['./data/Penn_Action_cropped/labels/' list_seq{i}];
+    lb_file = ['./data/penn-crop/labels/' list_seq{i}];
     anno = load(lb_file);
     assert(ischar(anno.action));
     action{i} = anno.action;
@@ -50,9 +57,14 @@ for i = 1:numel(list_act)
     ii = find(ismember(seq,find(ia == i)));  
     keep(ii(1:min(numel(ii),K))) = true;
 end
-keep(ismember(seq,extra)) = true;
 seq = seq(keep);
 run = sidx(ismember(sid,seq));
+
+% add extra sequences we used in the paper
+run = [run, 7815];   % seq 295
+run = [run, 31193];  % seq 787
+run = [run, 43879];  % seq 1300
+run = [run, 69442];  % seq 2027
 
 % prepare for scape
 addpath('./Deep3DPose/prepare/mesh/skel');
@@ -87,9 +99,8 @@ if texture ~= 0
 end
 
 % prepare for rendering
-blender_path = '/z/ywchao/tools/blender-2.78a-linux-glibc211-x86_64/blender';
-blank_file = '/z/ywchao/codes/image-play/Deep3DPose/4-render/blank.blend';
-render_file = '/z/ywchao/codes/image-play/Deep3DPose/4-render/render_model_views_ip.py';
+blank_file = './Deep3DPose/4-render/blank.blend';
+render_file = './Deep3DPose/4-render/render_model_views_ip.py';
 view_file = [vis_root 'view.txt'];
 
 % view file
@@ -103,15 +114,17 @@ if ~exist(view_file,'file')
     fclose(fid);
 end
 
-fprintf('render scape ... \n');
+fprintf('rendering scape ... \n');
 for i = run
     tic_print(sprintf('%05d/%05d\n',find(i == run),numel(run)));
     [sid, fid] = dataset.getSeqFrId(i);
     % make directories
     vis_dir = [vis_root num2str(sid,'%04d') '/'];
+    gif_dir = [gif_root num2str(sid,'%04d') '/'];
     makedir(vis_dir);
+    makedir(gif_dir);
     % load 3d predictions
-    pred_file = sprintf('./exp/penn-crop/%s/pred_%s/%05d.mat',expID,split,i);
+    pred_file = sprintf('./exp/penn-crop/%s/pred_%s/%05d.mat',exp_name,split,i);
     preds = load(pred_file);
     joints = [10,15,12,16,13,17,14,2,5,3,6,4,7];
     repos = zeros(opt.seqLength,17,3);
@@ -127,7 +140,7 @@ for i = run
     skel(:,:,2) = -skel(:,:,2);
     skel(:,:,3) = -skel(:,:,3);
     % load 2d predictions for getting bbox
-    eval_file = sprintf('./exp/penn-crop/%s/eval_%s/%05d.mat',expID,split,i);
+    eval_file = sprintf('./exp/penn-crop/%s/eval_%s/%05d.mat',exp_name,split,i);
     preds = load(eval_file);
     joints = [10,15,12,16,13,17,14,2,5,3,6,4,7];
     pred2 = zeros(opt.seqLength,17,2);
@@ -211,7 +224,7 @@ for i = run
         ma_fg = ma_fg(tt:bb, ll:rr);
         im_fg = im_fg(tt:bb, ll:rr, :);
         % load background image
-        bgd_file = sprintf('./data/Penn_Action_cropped/frames/%04d/%06d.jpg',sid,fid);
+        bgd_file = sprintf('./data/penn-crop/frames/%04d/%06d.jpg',sid,fid);
         im_bg = imread(bgd_file);
         im_bg = double(im_bg);
         % get bbox
@@ -235,6 +248,18 @@ for i = run
         % movefile(raw_file,vis_file);
         delete(raw_file);
         delete(log_file);
+    end
+    % generate gif
+    gif_file = fullfile(gif_dir,sprintf('%03d.gif',fid));
+    for j = 1:opt.seqLength
+        png_file = fullfile(vis_dir,sprintf('%03d-%02d.png',fid,j));
+        im = imread(png_file);
+        [imind,cm] = rgb2ind(im,256);
+        if j == 1
+            imwrite(imind,cm,gif_file,'gif','Loopcount',inf,'DelayTime',0.25);
+        else
+            imwrite(imind,cm,gif_file,'gif','WriteMode','append','DelayTime',0.25);
+        end
     end
 end
 fprintf('done.\n');
