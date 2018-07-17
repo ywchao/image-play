@@ -1,3 +1,6 @@
+
+local eval = require 'lib/util/eval'
+
 local M = {}
 
 function M.angle2dcm(r1, r2, r3, S)
@@ -45,10 +48,28 @@ function M.camProject(P, R, T, f, c)
   return p, D, X
 end
 
+function M.backProjectHMDM(hm, d, f)
+-- input
+--	hm:	3 x h x w
+--	d:  N
+  local pt = eval.getPreds(hm:view(1,unpack(hm:size():totable())))[1]
+  local c = torch.Tensor{hm:size(3),hm:size(2)}:div(2)
+  local P = torch.zeros(3,pt:size(1))
+  for j = 1, pt:size(1) do
+    local x = pt[j][1]
+    local y = pt[j][2]
+    P[1][j] = (x - c[1]) * d[j] / f
+    P[2][j] = (y - c[2]) * d[j] / f
+    P[3][j] = d[j]
+  end
+  return P
+end
+
 function M.shuffleLR(x, dataset)
   assert(x:dim() == 3 or x:dim() == 2, 'dim must be 3 or 2')
   local dim = x:dim() - 1
   local matchedParts
+  assert(dataset == 'penn-crop', 'currently only supports penn-crop')
   if dataset == 'penn-crop' then
     matchedParts = {{ 2, 3}, { 4, 5}, { 6, 7}, { 8, 9}, {10,11}, {12,13}}
   end

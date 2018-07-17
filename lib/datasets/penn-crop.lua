@@ -179,7 +179,7 @@ function PennCropDataset:getSampledIdx()
   for i = 1, self.ind2sub:size(1) do
     if self.ind2sub[i][2] == 1 then
       scnt = scnt + 1
-      -- Subsample videos (1/10) for training set only
+      -- Subsample videos (1/10) for training and test set only
       if (self.split == 'train' or self.split == 'test') and scnt % 10 ~= 1 then
         goto continue
       end

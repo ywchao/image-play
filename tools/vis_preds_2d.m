@@ -57,7 +57,7 @@ set(gcf,'Position',[2 26 915 330]);
 clear hi hh hp
 
 % load libraries
-libimg = ip_img();
+libimg = img();
 
 fprintf('visualizing 2d predictions ... \n');
 for i = run

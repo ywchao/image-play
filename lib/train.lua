@@ -55,7 +55,7 @@ function Trainer:train(epoch, loaders)
     return self.criterion.output, self.gradParams
   end
 
-  -- Set criterion weight for curriculum learning
+  -- Set sequence length and criterion weight for curriculum learning
   self:setSeqLenCritWeight(self.opt.currBase, epoch)
 
   local dataloader = loaders['train']
@@ -337,7 +337,7 @@ function Trainer:predict(loaders, split, eval)
 
   self.model:evaluate()
   for i, sample in dataloader:run({train=false,samp=samp}) do
-    -- Get input/output and convert to CUDA
+    -- Get input and convert to CUDA
     local index = sample.index
     local input = sample.input[1]:cuda()
 

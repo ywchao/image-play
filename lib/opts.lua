@@ -6,7 +6,6 @@ function M.parse(arg)
   cmd:text('Torch-7 image-play training script')
   cmd:text()
   cmd:text('Options:')
-  -- ------------ General options --------------------
   cmd:text(' ------------ General options --------------------')
   cmd:option('-data',  './data/penn-crop', 'Path to dataset')
   cmd:option('-dataset',   'penn-crop', 'Options: penn-crop')

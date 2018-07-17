@@ -29,9 +29,15 @@ function M.keys(table)
 end
 
 function M.unique(input)
--- input should be a one dimensinoal tensor
+-- input should be a one dimensinoal tensor or a table
+  local N
+  if torch.type(input) ~= 'table' then
+    N = input:numel()
+  else
+    N = #input
+  end
   local b = {}
-  for i = 1, input:numel() do
+  for i = 1, N do
     b[input[i]] = true
   end
   local out = {}
@@ -39,13 +45,27 @@ function M.unique(input)
     table.insert(out, i)
   end
   table.sort(out)
-  return torch.Tensor(out)
+  if torch.type(input) ~= 'table' then
+    out = torch.Tensor(out)
+  end
+  return out
 end
 
 function M.find(X, n)
 -- X should be a one dimensional tensor
   local indices = torch.linspace(1,X:size(1),X:size(1)):long()
   return indices[X:eq(n)]
+end
+
+function M.setdiff(A, B)
+-- input should be two one dimensinoal tensor
+  local out = {}
+  for i = 1, A:numel() do
+    if M.find(B, A[i]):numel() == 0 then
+      table.insert(out, A[i])
+    end
+  end
+  return torch.Tensor(out)
 end
 
 function M.append(tab1, tab2)
@@ -68,6 +88,27 @@ function M.slice(tab, ind)
     table.insert(t2, tab[i])
   end
   return t1, t2
+end
+
+-- Calls provides function on each entry of table t
+function M.applyTab(fn, t)
+  assert(type(t) == 'table')
+  local t_ = {}
+  for i = 1, #t do
+    t_[i] = fn(t[i])
+  end
+  return t_
+end
+
+function M.strsplit(str, delimiter)
+  if delimiter == nil then
+    delimiter = "%s"
+  end
+  local split = {}
+  for str in string.gmatch(str,"([^" .. delimiter .."]+)") do
+    table.insert(split, str)
+  end
+  return split
 end
 
 return M

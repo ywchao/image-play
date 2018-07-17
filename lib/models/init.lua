@@ -12,6 +12,7 @@ function M.setup(opt, checkpoint)
     print('=> Resuming model from ' .. modelPath)
     model = torch.load(modelPath)
   else
+    print('=> Creating model from file: lib/models/' .. opt.netType .. '.lua')
     local Model = require('lib/models/' .. opt.netType)
   
     -- Get output dim
@@ -22,7 +23,7 @@ function M.setup(opt, checkpoint)
     -- Create model
     model = Model.createModel(opt, outputDim)
   
-    -- Load hourglass
+    -- Load trained models
     if opt.hgModel ~= 'none' then
       assert(paths.filep(opt.hgModel),
           'initial hourglass model not found: ' .. opt.hgModel)

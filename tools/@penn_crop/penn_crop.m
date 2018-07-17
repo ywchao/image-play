@@ -32,7 +32,7 @@ classdef penn_crop
             obj.inputRes = opt.inputRes;
             obj.outputRes = opt.outputRes;
             % load lib
-            obj.img = ip_img();
+            obj.img = img();
         end
         
         % get seq id and num of frames

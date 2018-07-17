@@ -1,4 +1,4 @@
-classdef ip_img
+classdef img
     methods
         T = getTransform(obj, center, scale, rot, res);
         

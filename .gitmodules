@@ -2,10 +2,10 @@
 	path = pose-hg-train
 	url = https://github.com/ywchao/pose-hg-train.git
 	branch = image-play
+[submodule "skeleton2d3d"]
+        path = skeleton2d3d
+        url = https://github.com/ywchao/skeleton2d3d.git
 [submodule "Deep3DPose"]
 	path = Deep3DPose
 	url = https://github.com/ywchao/Deep3DPose.git
 	branch = image-play
-[submodule "skeleton2d3d"]
-	path = skeleton2d3d
-	url = https://github.com/ywchao/skeleton2d3d.git
