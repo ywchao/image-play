@@ -43,19 +43,11 @@ function M.setup(opt, checkpoint)
           'initial hourglass model not found: ' .. opt.hgModel)
       local model_hg = torch.load(opt.hgModel)
   
-      local lstm_nodes = model_hg:findModules('cudnn.LSTM')
-      if #lstm_nodes == 1 then
-        -- Model.loadHourglassLSTM(model, model_hg)
-        error('Not handling this case for now ... ')
-      elseif #lstm_nodes == 0 then
-        if torch.type(model) == 'nn.gModule' then
-          Model.loadHourglass(model, model_hg)
-        end
-        if torch.type(model) == 'table' then
-          Model.loadHourglass(model['enc'], model['dec'], model_hg)
-        end
-      else
-        error('initial hourglass model error')
+      if torch.type(model) == 'nn.gModule' then
+        Model.loadHourglass(model, model_hg)
+      end
+      if torch.type(model) == 'table' then
+        Model.loadHourglass(model['enc'], model['dec'], model_hg)
       end
     end
     if opt.s3Model ~= 'none' then
