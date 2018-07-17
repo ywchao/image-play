@@ -1,6 +1,3 @@
-[submodule "pose-hg-demo"]
-	path = pose-hg-demo
-	url = https://github.com/anewell/pose-hg-demo.git
 [submodule "pose-hg-train"]
 	path = pose-hg-train
 	url = https://github.com/ywchao/pose-hg-train.git
