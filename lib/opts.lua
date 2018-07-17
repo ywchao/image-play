@@ -8,7 +8,7 @@ function M.parse(arg)
   cmd:text('Options:')
   -- ------------ General options --------------------
   cmd:text(' ------------ General options --------------------')
-  cmd:option('-data',  './data/Penn_Action_cropped', 'Path to dataset')
+  cmd:option('-data',  './data/penn-crop', 'Path to dataset')
   cmd:option('-dataset',   'penn-crop', 'Options: penn-crop')
   cmd:option('-manualSeed',          3, 'Manually set RNG seed')
   cmd:option('-GPU',                 1, 'Default preferred GPU')

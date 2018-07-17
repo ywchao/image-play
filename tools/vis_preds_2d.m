@@ -1,11 +1,5 @@
 
-% add paths
-addpath('skeleton2d3d/h36m_utils/Release-v1.1/external_utils/xml_io_tools');
-addpath('skeleton2d3d/h36m_utils/Release-v1.1/H36M');
-addpath('skeleton2d3d/h36m_utils/Release-v1.1/utils');
-addpath('skeleton2d3d/h36m_utils/lawrennd-mocap');
-
-exp_name = 'hg-256-res-clstm-res-64';
+exp_name = 'hg-256-res-clstm';
 
 % split = 'train';
 % split = 'val';
@@ -20,21 +14,6 @@ pa = [8,1,2,3,1,5,6,9,10,11,0,9,12,13,9,15,16];
 co = {'b','b','g','g','b','r','r','b','b','b','b','b','r','r','b','g','g'};
 line_wd = 3;
 thres = 0.10;
-
-% load posSkel
-db = H36MDataBase.instance();
-posSkel = db.getPosSkel();
-Features{1} = H36MPose3DPositionsFeature();
-[~, posSkel] = Features{1}.select(zeros(0,96), posSkel, 'body');
-
-% init camera
-CameraVertex = zeros(5,3);
-CameraVertex(1,:) = [0 0 0];
-CameraVertex(2,:) = [-250  250  500];
-CameraVertex(3,:) = [ 250  250  500];
-CameraVertex(4,:) = [-250 -250  500];
-CameraVertex(5,:) = [ 250 -250  500];
-IndSetCamera = {[1 2 3 1] [1 4 2 1] [1 5 4 1] [1 5 3 1] [2 3 4 5 2]};
 
 % set opt and init dataset
 opt.data = './data/penn-crop';
@@ -75,13 +54,13 @@ run = sidx(ismember(sid,seq));
 
 % init figure
 figure(1);
-set(gcf,'Position',[2 26 2135 330]);
-clear hi hh hp hs1 hs2 hr1 hr2
+set(gcf,'Position',[2 26 915 330]);
+clear hi hh hp
 
 % load libraries
 libimg = ip_img();
 
-fprintf('visualizing 3d predictions ... \n');
+fprintf('visualizing 2d predictions ... \n');
 for i = run
     tic_print(sprintf('%05d/%05d\n',find(i == run),numel(run)));
     [sid, fid] = dataset.getSeqFrId(i);
@@ -92,7 +71,7 @@ for i = run
     makedir(gif_dir);
     
     % read image
-    im_file = sprintf('data/penn-crop/frames/%04d/%06d.jpg',sid,fid);
+    im_file = sprintf('./data/penn-crop/frames/%04d/%06d.jpg',sid,fid);
     im = imread(im_file);
     
     % load predictions
@@ -100,15 +79,6 @@ for i = run
     pred_file = sprintf('./exp/penn-crop/%s/pred_%s/%05d.mat',exp_name,split,i);
     preds = load(pred_file);
     hmap = preds.hmap;
-    repos = zeros(opt.seqLength,17,3);
-    repos(:,joints,:) = preds.repos;
-    repos(:,1,:) = (preds.repos(:,8,:) + preds.repos(:,9,:))/2;
-    repos(:,8,:) = (preds.repos(:,2,:) + preds.repos(:,3,:) + preds.repos(:,8,:) + preds.repos(:,9,:))/4;
-    repos(:,9,:) = (preds.repos(:,1,:) + preds.repos(:,2,:) + preds.repos(:,3,:))/3;
-    repos(:,11,:) = preds.repos(:,1,:);
-    repos = permute(repos,[1,3,2]);
-    trans = preds.trans;
-    focal = preds.focal;
     eval_file = sprintf('./exp/penn-crop/%s/eval_%s/%05d.mat',exp_name,split,i);
     evals = load(eval_file);
     pred = zeros(opt.seqLength,17,2);
@@ -139,14 +109,14 @@ for i = run
         if exist('hi','var')
             delete(hi);
         end
-        hi = subplot('Position',[0.00+0/7 0.00 1/7-0.00 1.00]);
+        hi = subplot('Position',[0.00+0/3 0.00 1/3-0.00 1.00]);
         imshow(im); hold on;
         
         % draw heatmap
         if exist('hh','var')
             delete(hh);
         end
-        hh = subplot('Position',[0.00+1/7 0.00 1/7-0.00 1.00]);
+        hh = subplot('Position',[0.00+1/3 0.00 1/3-0.00 1.00]);
         hm = squeeze(hmap(j,:,:,:));
         ip = squeeze(input(1,:,:,:));
         inp64 = imresize(double(ip),[opt.outputRes opt.outputRes]) * 0.3;
@@ -164,7 +134,7 @@ for i = run
         if exist('hp','var')
             delete(hp);
         end
-        hp = subplot('Position',[0.00+2/7 0.00 1/7-0.00 1.00]);
+        hp = subplot('Position',[0.00+2/3 0.00 1/3-0.00 1.00]);
         imshow(im); hold on;
         hd = nan(numel(pa),1);
         for ch = 1:numel(pa)
@@ -179,91 +149,6 @@ for i = run
                 hd(ch) = line([x1 x2], [y1 y2], ...
                     'color', co{ch}, ...
                     'linewidth',line_wd);
-            end
-        end
-        
-        % show 3D skeleton in camera coordinates
-        for k = 1:2
-            if k == 1
-                if exist('hs1','var')
-                    delete(hs1);
-                end
-                hs1 = subplot('Position',[0.03+3/7 0.07 1/7-0.04 0.93]);
-            end
-            if k == 2
-                if exist('hs2','var')
-                    delete(hs2);
-                end
-                hs2 = subplot('Position',[0.02+4/7 0.07 1/7-0.03 0.93]);
-            end
-            set(gca,'fontsize',6);
-            pred3d = permute(repos(j,:,:),[2 3 1]);
-            pred3d = pred3d + repmat(permute(trans(j,:),[2 1]),[1 size(pred3d,2)]);
-            pred3d([2 3],:) = pred3d([3 2],:);
-            hpos = showPose(pred3d,posSkel);
-            for l = 1:numel(hpos)-1
-                set(hpos(l+1),'linewidth',2);
-            end
-            minx = -1500; maxx = 1500;
-            miny =     0; maxy = 6500;
-            minz = -1500; maxz = 1500;
-            axis([minx maxx miny maxy minz maxz]);
-            set(gca,'ZTick',-2000:400:2000);
-            set(gca,'ZDir','reverse');
-            if k == 1
-                view([6,10]);
-            end
-            if k == 2
-                view([85,10]);
-            end
-            CVWorld = CameraVertex;
-            CVWorld(:,[2 3]) = CVWorld(:,[3 2]);
-            hc = zeros(size(CameraVertex,1),1);
-            for ind = 1:length(IndSetCamera)
-                hc(ind) = patch( ...
-                    CVWorld(IndSetCamera{ind},1), ...
-                    CVWorld(IndSetCamera{ind},2), ...
-                    CVWorld(IndSetCamera{ind},3), ...
-                    [0.5 0.5 0.5]);
-            end
-            if k == 2
-                ht = title({ ...
-                    sprintf('focal:  %3.0f',focal(j)), ...
-                    sprintf('trans:  %4.0f  %4.0f  %4.0f',trans(j,:)) ...
-                    });
-                set(ht,'fontsize',10);
-            end
-        end
-        
-        % show 3D skeleton relative to center
-        for k = 1:2
-            if k == 1
-                if exist('hr1','var')
-                    delete(hr1);
-                end
-                hr1 = subplot('Position',[0.02+5/7 0.07 1/7-0.035 0.93]);
-            end
-            if k == 2
-                if exist('hr2','var')
-                    delete(hr2);
-                end
-                hr2 = subplot('Position',[0.02+6/7 0.07 1/7-0.035 0.93]);
-            end
-            set(gca,'fontsize',6);
-            pred3d = permute(repos(j,:,:),[2 3 1]);
-            pred3d([2 3],:) = pred3d([3 2],:);
-            showPose(pred3d,posSkel);
-            minx = -1000; maxx = 1000;
-            miny = -1000; maxy = 1000;
-            minz = -1000; maxz = 1000;
-            axis([minx maxx miny maxy minz maxz]);
-            set(gca,'ZTick',-1000:200:1000);
-            set(gca,'ZDir','reverse');
-            if k == 1
-                view([6,10]);
-            end
-            if k == 2
-                view([85,10]);
             end
         end
         

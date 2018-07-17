@@ -5,7 +5,6 @@ local models = require 'lib/models/init'
 local Trainer = require 'lib/train'
 local opts = require 'lib/opts'
 local checkpoints = require 'lib/checkpoints'
-local visualize = require 'lib/visualize'
 
 local opt = opts.parse(arg)
 
@@ -45,8 +44,3 @@ trainer:predict(loaders, 'test', true)
 trainer:predict(loaders, 'train', false)
 trainer:predict(loaders, 'val', false)
 trainer:predict(loaders, 'test', false)
-
--- Visualize prediction
-visualize.run(loaders, 'train', opt)
-visualize.run(loaders, 'val', opt)
-visualize.run(loaders, 'test', opt)
