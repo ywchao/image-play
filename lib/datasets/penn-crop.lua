@@ -20,7 +20,6 @@ function PennCropDataset:__init(opt, split)
   self.seqId, self.nFrame = unpack(self:_preproAnno())
   -- Get phase number and LSTM sequence length
   self.nPhase = opt.nPhase
-  self.seqType = opt.seqType
   self.seqLength = opt.seqLength
   -- Get input and output resolution
   self.inputRes = opt.inputRes
@@ -43,18 +42,12 @@ end
 function PennCropDataset:_getSeq(i)
   local id = self.ind2sub[i][1]
   -- Get frame index
-  local ind
-  if self.seqType == 'phase' then
-    local ii = self.seqId:eq(id)
-    local nFrame = self.nFrame[ii][1]
-    ind = torch.linspace(i, i+nFrame-1, self.nPhase)
-    ind = torch.round(ind)
-    assert(ind:numel() == self.nPhase)
-    ind = ind[{{1, self.seqLength}}]
-  end
-  if self.seqType == 'raw' then
-    ind = torch.range(i,i+self.seqLength-1)
-  end
+  local ii = self.seqId:eq(id)
+  local nFrame = self.nFrame[ii][1]
+  local ind = torch.linspace(i, i+nFrame-1, self.nPhase)
+  local ind = torch.round(ind)
+  assert(ind:numel() == self.nPhase)
+  local ind = ind[{{1, self.seqLength}}]
   -- Replace overlength indices with the last index
   local rep_ind, rep_val
   -- ind2sub
@@ -181,9 +174,7 @@ function PennCropDataset:getSampledIdx()
   local sidx
   local scnt = 0
   -- sidx should not depend on the input seqLength
-  local seqType_ = self.seqType
   local seqLength_ = self.seqLength
-  self.seqType = 'phase'
   self.seqLength = 16
   for i = 1, self.ind2sub:size(1) do
     if self.ind2sub[i][2] == 1 then
@@ -201,7 +192,6 @@ function PennCropDataset:getSampledIdx()
     end
     ::continue::
   end
-  self.seqType = seqType_
   self.seqLength = seqLength_
   return sidx
 end

@@ -8,7 +8,6 @@ classdef penn_crop
         seqId
         nFrame
         nPhase
-        seqType
         seqLength
         inputRes
         outputRes
@@ -28,7 +27,6 @@ classdef penn_crop
             [obj.seqId, obj.nFrame] = preproAnno(obj);
             % get phase number and LSTM sequence length
             obj.nPhase = opt.nPhase;
-            obj.seqType = opt.seqType;
             obj.seqLength = opt.seqLength;
             % get input and output resolution
             obj.inputRes = opt.inputRes;

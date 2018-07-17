@@ -55,13 +55,13 @@ function Trainer:initLogger(logger)
   names[3] = 'time'
   names[4] = 'datTime'
   for i = 1, self.opt.seqLength do
-    names[#names+1] = 'loss' .. i .. 'p'
+    names[#names+1] = 'loss' .. i
   end
   for i = 1, self.opt.seqLength do
-    names[#names+1] = 'err' .. i .. 'p'
+    names[#names+1] = 'err' .. i
   end
   for i = 1, self.opt.seqLength do
-    names[#names+1] = 'acc' .. i .. 'p'
+    names[#names+1] = 'acc' .. i
   end
   logger:setNames(names)
 end

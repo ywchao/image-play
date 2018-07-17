@@ -39,7 +39,6 @@ IndSetCamera = {[1 2 3 1] [1 4 2 1] [1 5 4 1] [1 5 3 1] [2 3 4 5 2]};
 % set opt and init dataset
 opt.data = './data/penn-crop';
 opt.nPhase = 16;
-opt.seqType = 'phase';
 opt.seqLength = 16;
 opt.inputRes = 256;
 opt.outputRes = 64;

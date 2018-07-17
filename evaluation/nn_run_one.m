@@ -25,7 +25,6 @@ assert(all(tr.part(repmat(tr.visible,[1 1 2]) == 0) == 0) == 1);
 % set opt
 opt.data = './data/penn-crop';
 opt.nPhase = 16;
-opt.seqType = 'phase';
 opt.seqLength = 16;
 opt.inputRes = 256;
 opt.outputRes = 64;

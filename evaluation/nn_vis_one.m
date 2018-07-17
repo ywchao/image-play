@@ -17,7 +17,6 @@ param.partcolor = {'g','g','g','r','b','r','b','y','y','m','c','m','c'};
 % set opt
 opt.data = './data/penn-crop';
 opt.nPhase = 16;
-opt.seqType = 'phase';
 opt.seqLength = 16;
 opt.inputRes = 256;
 opt.outputRes = 64;

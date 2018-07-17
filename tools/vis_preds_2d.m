@@ -18,7 +18,6 @@ thres = 0.10;
 % set opt and init dataset
 opt.data = './data/penn-crop';
 opt.nPhase = 16;
-opt.seqType = 'phase';
 opt.seqLength = 16;
 opt.inputRes = 256;
 opt.outputRes = 64;
