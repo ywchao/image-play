@@ -1,37 +1,11 @@
 
-inp_name = 'hg-256';
-
-% split = 'val';
-% split = 'test';
-
-% feat_type = 1;  % skel
-% feat_type = 2;  % skel + caffenet
-% feat_type = 3;  % skel + oracle
-
-% set visibility threshold for training data
-% selected by maximizing validation accuracy
-% param.thres_vis = 9;
-
-% set number of candidate images retrieved with caffe feature
-% selected by maximizing validation accuracy
-% param.K = 22500;
-
-feat_root = 'caffe-feat/exp/penn-crop/bvlc_reference_caffenet/';
-
 % set save directory
-switch feat_type
-    case 1
-        exp_name = sprintf('nn-skel-%s-th%02d',inp_name,param.thres_vis);
-    case 2
-        exp_name = sprintf('nn-skel-caffenet-%s-th%02d-K%05d',inp_name,param.thres_vis,param.K);
-    case 3
-        exp_name = sprintf('nn-skel-oracle-%s-th%02d',inp_name,param.thres_vis);
-end
+exp_name = sprintf('nn-%s-th%02d',mode,thres_vis);
 save_dir = sprintf('exp/penn-crop/%s/eval_%s/',exp_name,split);
 makedir(save_dir);
 
 % load training data
-annot_file = './data/Penn_Action_cropped/train.h5';
+annot_file = './data/penn-crop/train.h5';
 anno_tr.ind2sub = permute(hdf5read(annot_file,'ind2sub'),[2 1]);
 anno_tr.part = permute(hdf5read(annot_file,'part'),[3 2 1]);
 
@@ -41,7 +15,7 @@ tr.visible = anno_tr.part(:,:,1) ~= 0 & anno_tr.part(:,:,2) ~= 0;
 [tr.part, tr.c] = normalize_part(anno_tr.part, tr.visible);
 
 % remove samples with limited visible joints
-is_rm = tr.c < param.thres_vis;
+is_rm = tr.c < thres_vis;
 tr.id(is_rm, :) = [];
 tr.visible(is_rm, :) = [];
 tr.part(is_rm, :, :) = [];
@@ -49,7 +23,7 @@ tr.c(is_rm) = [];
 assert(all(tr.part(repmat(tr.visible,[1 1 2]) == 0) == 0) == 1);
 
 % set opt
-opt.data = './data/Penn_Action_cropped';
+opt.data = './data/penn-crop';
 opt.nPhase = 16;
 opt.seqType = 'phase';
 opt.seqLength = 16;
@@ -60,35 +34,24 @@ opt.outputRes = 64;
 dataset_tr = penn_crop(opt, 'train');
 dataset_ts = penn_crop(opt, split);
 
-% load caffe features and compute distance
-if feat_type == 2
-    feat_file = [feat_root 'feat_train.mat'];
-    ld = load(feat_file);
-    tr.feat = ld.feat;
-    tr.feat(is_rm, :, :) = [];
-    feat_file = [feat_root 'feat_' split '.mat'];
-    ld = load(feat_file);
-    ts.feat = ld.feat;
-end
-
-% get action category
-if feat_type == 3
-    list_seq = dir('./data/Penn_Action_cropped/labels/*.mat');
+% get action labels
+if strcmp(mode,'oracle') == 1
+    list_seq = dir('./data/penn-crop/labels/*.mat');
     list_seq = {list_seq.name}';
     num_seq = numel(list_seq);
     action = cell(num_seq,1);
     for i = 1:num_seq
-        lb_file = ['./data/Penn_Action_cropped/labels/' list_seq{i}];
+        lb_file = ['./data/penn-crop/labels/' list_seq{i}];
         anno = load(lb_file);
         assert(ischar(anno.action));
         action{i} = anno.action;
     end
-    [list_act,~,ia] = unique(action, 'stable');
+    [~,~,ia] = unique(action, 'stable');
 end
 
-fprintf('running nn skel ... \n');
+fprintf('running nn ... \n');
 for i = 1:dataset_ts.size()
-    tic_print(sprintf('  %04d/%04d\n',i,dataset_ts.size()));
+    tic_print(sprintf('  %05d/%05d\n',i,dataset_ts.size()));
     
     % skip if exists
     save_file = [save_dir num2str(i,'%05d') '.mat'];
@@ -97,25 +60,20 @@ for i = 1:dataset_ts.size()
     end
     
     % load estimated pose
-    pred_file = sprintf('./exp/penn-crop/pose-est-%s/eval_%s/%05d.mat',inp_name,split,i);
+    pred_file = sprintf('./exp/penn-crop/hg-256/eval_%s/%05d.mat',split,i);
     pred = load(pred_file);
     pred = pred.eval;
-        
+    
     % normalize pred pose
     pa_ = repmat(pred,[numel(tr.id) 1 1]);
     [pr_part, ~, mu, sc] = normalize_part(pa_, tr.visible);
     assert(all(pr_part(repmat(tr.visible,[1 1 2]) == 0) == 0) == 1);
     
     % find nearest neighbor in training set and compute pred mse
-    switch feat_type
-        case 1
+    switch mode
+        case 'all'
             mse_all = sum(sum((pr_part - tr.part) .^ 2,3),2) ./ tr.c;
-        case 2
-            dist = sum((repmat(ts.feat(i,:),[numel(tr.id),1]) - tr.feat) .^ 2,2);
-            [~, ii] = sort(dist,'ascend');
-            mse_all = sum(sum((pr_part - tr.part) .^ 2,3),2) ./ tr.c;
-            mse_all(ii(param.K+1:end)) = Inf;
-        case 3
+        case 'oracle'
             sid = dataset_ts.getSeqFrId(i);
             aid = ia(sid);
             match = ia(anno_tr.ind2sub(tr.id,1)) == aid;
@@ -135,7 +93,7 @@ for i = 1:dataset_ts.size()
         % normalize
         if j == 1
             [tf_part, tf_c, tf_mu, tf_sc] = normalize_part(tf_part_, tf_vis);
-            assert(tf_c >= param.thres_vis);
+            assert(tf_c >= thres_vis);
             assert(numel(find(tr.id == nn_seq(j))) == 1);
             assert(all(tf_part(:) == reshape(tr.part(ind_nn,:,:),[numel(tr.part(ind_nn,:,:)), 1])) == 1);
             assert(all(tf_vis == tr.visible(ind_nn,:,:)) == 1);
