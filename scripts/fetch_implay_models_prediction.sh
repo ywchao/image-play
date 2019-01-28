@@ -4,7 +4,7 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../" && pwd )/exp"
 mkdir -p $DIR && cd $DIR
 
 FILE=precomputed_implay_models_prediction.tar.gz
-URL=http://napoli18.eecs.umich.edu/public_html/data/cvpr_2017/precomputed_implay_models_prediction.tar.gz
+ID=1VnDJRWuzff6hgcvhDDqYdSJd0NNru3cY
 
 if [ -f $FILE ]; then
   echo "File already exists..."
@@ -13,7 +13,7 @@ fi
 
 echo "Downloading precomputed implay models (2.4G)..."
 
-wget $URL -O $FILE
+wget --load-cookies /tmp/cookies.txt "https://docs.google.com/uc?export=download&confirm=$(wget --quiet --save-cookies /tmp/cookies.txt "https://docs.google.com/uc?export=download&id=$ID" -O- | sed -rn 's/.*confirm=([0-9A-Za-z_]+).*/\1/p')&id=$ID" -O $FILE && rm -rf /tmp/cookies.txt
 
 echo "Unzipping..."
 
